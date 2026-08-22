@@ -1,0 +1,33 @@
+# Scratch dir — workers pass file paths through here, never commit contents
+scratch/*
+!scratch/.gitkeep
+
+# Generated assets, content-addressed by job id
+assets/*
+!assets/.gitkeep
+
+# Model weights — large, licensed separately, never in git
+weights/
+*.safetensors
+*.ckpt
+*.pth
+
+# Job + recipe database
+*.db
+*.sqlite
+*.sqlite3
+
+# Python (per-worker venvs)
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env
+.env
+.env.local
