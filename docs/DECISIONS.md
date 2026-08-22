@@ -1,23 +1,43 @@
-# Open Decisions
+# Decisions
 
-Tracking §11 of the master plan. Settled decisions move to the top with a date and rationale.
+Tracking §11 of the master plan. Settled decisions carry a date and rationale.
 
-## Settled
+## Settled 2026-08-22
 
-### GPU / VRAM — settled 2026-08-22 by measurement
+### GPU / VRAM — settled by measurement
 RTX 2070, 8 GB, compute capability 7.5 (Turing). See [hardware.md](./hardware.md).
-Consequence: bottom tier of the plan's model table. TRELLIS 2 and Hunyuan3D are out;
-InstantMesh / TripoSR are in. The Turing compute-capability floor is the binding constraint,
-not the VRAM number.
+Bottom tier of the plan's model table. TRELLIS 2 and Hunyuan3D are out; InstantMesh /
+TripoSR are in. The Turing compute-capability floor is the binding constraint, not the
+VRAM number — FlashAttention-2 requires SM 8.0+.
+
+### Phase 1 approach — ComfyUI de-risk first
+Take §10's hybrid path. Validate the full chain in ComfyUI to learn which models actually
+run on Turing, *then* build venv + FastAPI wrappers around only the survivors. The plan
+offers this as a de-risk for exactly our situation; on this hardware it is the entry route,
+not the fallback.
+
+### OS — install WSL2 with CUDA passthrough
+Native Windows costs days on flash-attention and CUDA-extension builds. WSL2 needs its own
+CUDA toolkit inside the distro. VRAM stays shared with the Windows desktop either way.
+
+### Orchestrator language — TypeScript
+Plan's own recommendation, and the UI is the part that gets iterated most. Reinforced by
+Harrison's day job being React/TypeScript. Fastify + SQLite, single worker.
+
+### Rigging — cut to v2
+Makes Phase 2 ~40% shorter. Props, crops, walls, and terrain — most of what Homestead
+Defense needs — don't need skeletons. Also defers the thorniest licensing review (several
+rigging models release code permissively but weights research-only), which matters because
+these assets go into games that get sold.
+
+### Target engine — both, Godot 4 defaults first
+Export GLB + FBX + STL from one Blender pass as the plan calls for, but default tri budget
+and texture resolution to Godot 4 low-poly. Matches the existing `asset-pack` pipeline and
+Homestead Defense, and is the kindest ask of an 8 GB card. Unreal preset added later for
+Homestead & Market / Elixir of Life.
 
 ## Still open
 
-- **OS — WSL2 vs native Linux vs native Windows.** WSL2 is not currently installed. The plan
-  is firm that native Windows costs days on CUDA-extension builds.
-- **Orchestrator language — TS vs Python.** Plan recommends TS (one mental model, and the UI
-  is the part that gets iterated most). Harrison's day job is React/TypeScript, which reinforces this.
-- **Primary target — Godot 4 vs Unreal.** Harrison ships both (Homestead Defense is Godot 4
-  low-poly; Homestead & Market / Elixir of Life are Unreal). This sets default tri budget and
-  texture resolution. Low-poly Godot targets are also the kinder ask of an 8 GB card.
-- **Rigging in v1 or v2.** Cutting it makes Phase 2 ~40% shorter. Props, crops, and terrain —
-  which is most of what the Godot game needs — don't need it at all.
+- Which image model (Qwen-Image 2.0 vs Z-Image-Turbo) — defer until ComfyUI tells us what
+  fits in ~6.7 GB alongside everything else.
+- Whether InstantMesh or TripoSR wins on quality-per-VRAM for low-poly targets.
