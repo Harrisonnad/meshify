@@ -49,6 +49,16 @@ NVFP4 targets Blackwell tensor cores and is unproven on Turing. See
 [COMFYUI_SETUP.md](./COMFYUI_SETUP.md) for the full setup. Qwen-Image 2.0 was not tested —
 Z-Image-Turbo's result was good enough to not need the comparison for v1.
 
+### Mesh generator — TripoSR, validated 2026-08-30
+TripoSR meets Phase 1's exit criteria: watertight mesh (confirmed via `trimesh`), fast
+(<10s actual compute), comfortable VRAM headroom. Had to give it its own venv (`~/triposr`,
+separate from ComfyUI's) after hitting a `transformers` version conflict trying to reuse the
+ComfyUI venv via `ComfyUI-Flowty-TripoSR` — see [MESH_GEN.md](./MESH_GEN.md) for the full
+story, including a `torchmcubes` CUDA-extension build that turned out to be entirely
+unbuildable on this system's GCC 15 (patched around it with a `scikit-image` CPU fallback,
+which was not slow). InstantMesh not tried — TripoSR already clears the bar for v1; a
+quality-per-VRAM comparison can happen later if TripoSR's output proves insufficient.
+
 ## Still open
 
-- Whether InstantMesh or TripoSR wins on quality-per-VRAM for low-poly targets.
+- Whether InstantMesh is worth adding later for quality-per-VRAM comparison (not blocking).

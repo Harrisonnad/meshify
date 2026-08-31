@@ -54,8 +54,10 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
       torch 2.13.0+cu126) — GPU detected, server starts clean on `pytorch`/`eager` attention
 - [x] Image model validated: Z-Image-Turbo (int8+fp8) generates clean 1024x1024 images in
       ~38s via the ComfyUI API — see [docs/COMFYUI_SETUP.md](docs/COMFYUI_SETUP.md)
-- [ ] **Phase 1** — pick + validate a mesh generator (InstantMesh vs TripoSR) ← **next**
-- [ ] Phase 2 — stage workers
+- [x] Mesh generator validated: TripoSR produces a watertight mesh (103K verts) from the
+      tractor test image in <10s compute — see [docs/MESH_GEN.md](docs/MESH_GEN.md)
+- [x] **Phase 1 complete** — image→mesh chain proven end to end on this hardware
+- [ ] Phase 2 — stage workers ← **next**
 - [ ] Phase 3 — orchestrator
 - [ ] Phase 4 — UI
 - [ ] Phase 5 — hardening
