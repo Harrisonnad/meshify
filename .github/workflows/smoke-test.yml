@@ -1,0 +1,71 @@
+name: Orchestrator smoke test
+
+# Master plan section 7: "A GitHub Actions job that runs the orchestrator with stubbed
+# workers against a golden fixture — catches contract drift without needing a GPU runner."
+#
+# Runs entirely on a plain Linux runner: stub_worker.py is pure Python/FastAPI (no CUDA, no
+# Blender, no WSL), and the orchestrator has no native dependencies since better-sqlite3 was
+# dropped for a flat JSON store (see docs/ORCHESTRATOR.md) — so this needs neither a GPU
+# runner nor a Windows one, just Node + Python.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install orchestrator dependencies
+        working-directory: orchestrator
+        run: npm ci
+
+      - name: Install stub worker dependencies
+        run: pip install -r workers/requirements-stub.txt
+
+      - name: Verify fixture cube is present
+        run: test -s workers/blender/fixtures/cube.glb
+
+      - name: Start stub workers
+        run: |
+          python workers/stub_worker.py --worker imggen  --port 8101 > imggen.log  2>&1 &
+          python workers/stub_worker.py --worker meshgen --port 8102 > meshgen.log 2>&1 &
+          python workers/stub_worker.py --worker blender --port 8104 > blender.log 2>&1 &
+
+      - name: Start orchestrator
+        working-directory: orchestrator
+        run: npm start > ../orchestrator.log 2>&1 &
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8100/health > /dev/null; then
+              echo "orchestrator is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "orchestrator never came up"
+          exit 1
+
+      - name: Run smoke test
+        run: node scripts/smoke-test.mjs
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "--- imggen.log ---"; cat imggen.log || true
+          echo "--- meshgen.log ---"; cat meshgen.log || true
+          echo "--- blender.log ---"; cat blender.log || true
+          echo "--- orchestrator.log ---"; cat orchestrator.log || true

@@ -1,0 +1,21 @@
+# Exact frozen dependencies for the shared Windows-side venv (.venv-stub) used by
+# stub_worker.py and workers/blender/server.py — both need only fastapi/uvicorn/pydantic,
+# no GPU deps, so they share one lightweight venv per docs/WORKER_CONTRACT.md.
+#
+# Captured: 2026-08-31, Windows-native Python
+#
+# Regenerate after any change to this venv:
+#   .venv-stub\Scripts\pip.exe freeze
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+click==8.5.0
+fastapi==0.141.1
+h11==0.16.0
+idna==3.19
+pydantic==2.13.5
+pydantic_core==2.46.5
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.52.4

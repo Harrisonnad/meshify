@@ -6,6 +6,12 @@ natural long-running async server, so each /run shells out to a fresh
 the fixture cube (make_fixture_cube.py). This worker needs no CUDA and no special venv; it
 runs on plain Windows Python, same as the stub worker (see docs/WORKER_CONTRACT.md).
 
+Pin recorded here per master plan §7 ("pin everything... these repos break constantly" applies
+to Blender's own releases too, not just Python packages): verified against
+Blender 5.2.0 LTS, hash fbe6228777e7, built 2026-07-14. cleanup.py's operator names
+(bpy.ops.wm.stl_export in particular, renamed from export_mesh.stl in earlier Blender
+versions) are specific to this release line.
+
     python server.py --port 8104 [--blender "C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe"]
 """
 import argparse

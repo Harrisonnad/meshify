@@ -66,13 +66,31 @@ async def run(req: RunRequest) -> dict:
 
     job_dir = SCRATCH / req.job_id
     job_dir.mkdir(parents=True, exist_ok=True)
-    out = job_dir / f"{WORKER_NAME}_out.glb"
-    out.write_bytes(FIXTURE_CUBE.read_bytes())
+
+    # Output keys match the real workers' contracts exactly (workers/imggen, workers/meshgen,
+    # workers/blender) so the orchestrator's pipeline.ts can run against stubs unmodified —
+    # this is what makes the CI smoke test meaningful rather than trivially passing.
+    if WORKER_NAME == "imggen":
+        out = job_dir / "image.png"
+        out.write_bytes(FIXTURE_CUBE.read_bytes())
+        outputs = {"image": str(out)}
+    elif WORKER_NAME == "blender":
+        clean_dir = job_dir / "clean"
+        clean_dir.mkdir(exist_ok=True)
+        outputs = {}
+        for fmt in ("glb", "fbx", "stl"):
+            out = clean_dir / f"asset.{fmt}"
+            out.write_bytes(FIXTURE_CUBE.read_bytes())
+            outputs[fmt] = str(out)
+    else:  # meshgen (mesh), rig (v2, not wired into the orchestrator yet)
+        out = job_dir / "raw.glb"
+        out.write_bytes(FIXTURE_CUBE.read_bytes())
+        outputs = {"mesh": str(out)}
 
     # Rule 1: hand back a path, never the bytes.
     return {
         "job_id": req.job_id,
-        "outputs": {"mesh": str(out)},
+        "outputs": outputs,
         "meta": {"seed": seed, "tris": 12, "stub": True},
     }
 

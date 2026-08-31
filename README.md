@@ -78,7 +78,17 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
       real generated assets — see [docs/UI.md](docs/UI.md) (also: pinned to Vite 5 after
       Vite 8's default Rolldown bundler hit a native-binding wall, the fourth native-toolchain
       issue this project has hit on this machine)
-- [ ] Phase 5 — hardening ← **next**
+- [x] **Phase 5 — hardening**: lockfiles + upstream commit SHAs for every worker,
+      one-command bring-up (`scripts/dev.ps1`), a CI smoke test running the orchestrator
+      against stubbed workers on a plain Linux runner (`.github/workflows/smoke-test.yml` +
+      `scripts/smoke-test.mjs` — which immediately caught `stub_worker.py`'s output keys
+      having drifted from the real workers' contract), and a review of the model-swap-test
+      question — see [docs/HARDENING.md](docs/HARDENING.md) for what's fully verified vs.
+      still open (notably: `dev.ps1`'s WSL launches and the CI workflow's actual GitHub
+      Actions run are both unverified from within this session, for different reasons)
+- [ ] Master plan fully implemented — remaining stretch goals: 4-candidate concept picker,
+      normal-map baking, InstantMesh (blocked on this hardware's toolchain), license audit
+      before shipping anything commercially (§8, not started)
 
 ## Head start: Blender
 
