@@ -113,7 +113,37 @@ This is deliberately dense/raw output (marching cubes at resolution 256) — Pha
 cleanup pass (decimate, normals, UV unwrap) is what turns this into a game-ready asset, per
 [README.md](../README.md)'s "Head start: Blender" section.
 
+## Known limitation: surface noise on geometrically complex subjects
+
+The watering-can test asset (see [ORCHESTRATOR.md](./ORCHESTRATOR.md)) came out with a visibly
+rippled/rough surface and a deformed spout, unlike the clean tractor test case. Investigated
+whether this was a decimation artifact — regenerated the mesh at marching-cubes resolution 384
+(vs the default 256, giving 244K raw tris instead of 107K) and re-cleaned it with a much
+gentler decimation target (15,000 tris instead of 6,000), reusing the exact same source image
+to isolate the variables. **Result: no meaningful improvement** — the same ripple pattern and
+spout deformation persisted at every resolution and decimation level tested.
+
+Conclusion: the roughness is baked into TripoSR's underlying density-field reconstruction for
+this subject, not an artifact of mesh extraction or decimation. Thin, disconnected geometry
+(the can's spout, the open handle loop) is inherently hard for a single-view reconstruction
+model — more mesh resolution just captures the noise in more detail rather than removing it.
+**Accepted as a v1 quality ceiling** for geometrically complex, thin-featured subjects;
+chunky/simple shapes (the tractor) don't show this problem.
+
+Two real fixes exist, both deferred:
+- A smoothing pass (Laplacian/vertex smooth) in the Blender cleanup worker — cheap, no new
+  dependencies, but a blunt instrument that could soften real detail elsewhere too.
+- InstantMesh instead of TripoSR (see below) — likely handles thin geometry better since it
+  reconstructs from multiple synthesized views internally rather than one, but carries real
+  setup risk on this hardware.
+
 ## Still open (see DECISIONS.md)
 
-- InstantMesh not yet tried — TripoSR already meets the Phase 1 bar (watertight, fast, fits
-  comfortably in VRAM). Worth a comparison later for quality-per-VRAM, but not blocking.
+- InstantMesh not tried, and now deprioritized: its dependencies include `nvdiffrast`
+  (`git+https://github.com/NVlabs/nvdiffrast`), which compiles its own CUDA extension at
+  install time — the same mechanism that made `torchmcubes` **unfixably** incompatible with
+  this system's GCC 15 (confirmed: not just a version check, an actual C++ parser
+  incompatibility nvcc's `-allow-unsupported-compiler` flag doesn't touch). It also pins
+  `xformers==0.0.22.post7` against old torch/CUDA versions, risking a second compile. Not
+  worth the setup time speculatively; revisit only if TripoSR's quality ceiling becomes a
+  real blocker rather than a known limitation.

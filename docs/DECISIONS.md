@@ -59,6 +59,23 @@ unbuildable on this system's GCC 15 (patched around it with a `scikit-image` CPU
 which was not slow). InstantMesh not tried — TripoSR already clears the bar for v1; a
 quality-per-VRAM comparison can happen later if TripoSR's output proves insufficient.
 
+### Surface noise on complex subjects — accepted v1 limitation, 2026-08-31
+The watering-can test asset came out rough (rippled surface, deformed spout) unlike the clean
+tractor case. Tried tuning around it — higher marching-cubes resolution (384 vs 256) and a
+much gentler decimation target (15,000 vs 6,000 tris), reusing the identical source image to
+isolate variables. No improvement at any setting tested; see [MESH_GEN.md](./MESH_GEN.md).
+The roughness is baked into TripoSR's reconstruction for thin/disconnected geometry, not an
+artifact of mesh extraction or decimation. Considered switching to InstantMesh (untried, see
+below) but its `nvdiffrast` dependency compiles a CUDA extension the same way `torchmcubes`
+did, and that failure mode was confirmed **unfixable** on this system's GCC 15 — not worth the
+setup time speculatively. **Accepted as a known v1 quality ceiling** for geometrically
+complex, thin-featured subjects. A Blender smoothing pass is the cheaper fix if this becomes
+a real blocker later.
+
 ## Still open
 
-- Whether InstantMesh is worth adding later for quality-per-VRAM comparison (not blocking).
+- InstantMesh — deprioritized, not just deferred: its `nvdiffrast` dependency needs the same
+  class of CUDA extension build that's already confirmed unbuildable on this machine
+  (see above). Revisit only if the GCC/toolchain situation changes (e.g. a newer CUDA
+  toolkit release that supports GCC 15) or the surface-noise limitation becomes a real
+  blocker rather than an accepted one.
