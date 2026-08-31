@@ -57,8 +57,17 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
 - [x] Mesh generator validated: TripoSR produces a watertight mesh (103K verts) from the
       tractor test image in <10s compute — see [docs/MESH_GEN.md](docs/MESH_GEN.md)
 - [x] **Phase 1 complete** — image→mesh chain proven end to end on this hardware
-- [ ] Phase 2 — stage workers ← **next**
-- [ ] Phase 3 — orchestrator
+- [x] `imggen` and `meshgen` real workers built, each validated against the actual
+      `/health` + `/run` HTTP contract (not stubs) — see
+      [docs/PHASE2_WORKERS.md](docs/PHASE2_WORKERS.md), including a confirmed finding that
+      running both workers' GPU models loaded at once wedges the card instead of failing
+      cleanly (reinforces the single-worker-queue design)
+- [x] `blender` cleanup worker built and validated (decimate/normals/UV/origin + GLB+FBX+STL
+      export), each of the three real workers now proven individually — see
+      [docs/PHASE2_WORKERS.md](docs/PHASE2_WORKERS.md) for the normal-map-baking deferral and
+      a known decimation-breaks-watertightness tradeoff (matters for STL/printing, not GLB/FBX)
+- [x] **Phase 2 workers complete** (rig stays cut to v2 per DECISIONS.md)
+- [ ] Phase 3 — orchestrator ← **next**
 - [ ] Phase 4 — UI
 - [ ] Phase 5 — hardening
 
