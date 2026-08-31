@@ -1,6 +1,15 @@
 # WSL2 + CUDA Setup
 
-Status as of 2026-08-22: **blocked on a BIOS change.** Windows-side work is done.
+Status as of 2026-08-30: **Done, all 4 steps.** BIOS SVM enabled, Ubuntu installed with user
+`blitz`, GPU passthrough verified (`nvidia-smi` inside WSL sees the RTX 2070, driver 615.65.06,
+CUDA UMD 13.4), and CUDA Toolkit 12.6 installed via the `wsl-ubuntu` apt repo (`nvcc` confirms
+`release 12.6, V12.6.85`). Chose 12.6 over the newer 12.8/12.9/13.x meta-packages available in
+the repo because current PyTorch wheels and the Phase 1 model repos (InstantMesh/TripoSR,
+ComfyUI) target CUDA 12.x — staying a step behind the bleeding edge avoids nvcc/wheel
+mismatches when building CUDA extensions from source. Turing (sm_75) is well within 12.6's
+supported range.
+
+Next: **Phase 1** — ComfyUI chain validation on Turing (see [DECISIONS.md](./DECISIONS.md)).
 
 ## Why WSL2 at all
 

@@ -48,8 +48,9 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
 - [x] **Phase 0** — hardware gate, repo scaffold, decisions recorded
 - [x] Blender headless GLB export verified end to end (the cube fixture is real output)
 - [x] Worker contract defined; stub worker returning the fixed cube
-- [ ] WSL2 + CUDA passthrough install ← **next, needs admin + reboot**
-- [ ] **Phase 1** — ComfyUI chain validation on Turing
+- [x] WSL2 installed, GPU passthrough verified (`nvidia-smi` sees the RTX 2070 in WSL)
+- [x] CUDA Toolkit 12.6 installed inside the distro (`nvcc` confirms release 12.6.85)
+- [ ] **Phase 1** — ComfyUI chain validation on Turing ← **next**
 - [ ] Phase 2 — stage workers
 - [ ] Phase 3 — orchestrator
 - [ ] Phase 4 — UI
