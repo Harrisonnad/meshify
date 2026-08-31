@@ -36,8 +36,19 @@ and texture resolution to Godot 4 low-poly. Matches the existing `asset-pack` pi
 Homestead Defense, and is the kindest ask of an 8 GB card. Unreal preset added later for
 Homestead & Market / Elixir of Life.
 
+### Image model — Z-Image-Turbo, validated 2026-08-30
+Chose Z-Image-Turbo over Qwen-Image 2.0 for the lighter footprint and speed (Harrison's call
+— safer bet for an 8 GB card over Qwen's likely-higher quality ceiling). Validated in ComfyUI:
+`z_image_turbo_int8_convrot.safetensors` (int8 diffusion, 5.8 GiB) + `qwen_3_4b_fp8_mixed.safetensors`
+(fp8 text encoder, 5.3 GiB) + `ae.safetensors` VAE. 1024x1024, 8 steps, `res_multistep`/`simple`,
+cfg 1, `ModelSamplingAuraFlow` shift 3 — the model's own turbo-distilled defaults. First
+generation (cold model load + sampling): ~38s, no OOM, 7.0 GB VRAM free to start. Output was
+clean and sharp, on a plain background — the master plan's "clean alpha for the mesh
+generator" requirement. Skipped the nvfp4 diffusion-model variant (smaller, 4.5 GiB) since
+NVFP4 targets Blackwell tensor cores and is unproven on Turing. See
+[COMFYUI_SETUP.md](./COMFYUI_SETUP.md) for the full setup. Qwen-Image 2.0 was not tested —
+Z-Image-Turbo's result was good enough to not need the comparison for v1.
+
 ## Still open
 
-- Which image model (Qwen-Image 2.0 vs Z-Image-Turbo) — defer until ComfyUI tells us what
-  fits in ~6.7 GB alongside everything else.
 - Whether InstantMesh or TripoSR wins on quality-per-VRAM for low-poly targets.
