@@ -72,8 +72,13 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
       [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md)), single-worker sequential dispatch,
       full recipe tracking. One `POST /jobs` call now chains imggen → meshgen → blender
       automatically and produces real `.glb`/`.fbx`/`.stl` files end to end.
-- [ ] Phase 4 — UI ← **next**
-- [ ] Phase 5 — hardening
+- [x] **Phase 4 — UI built and verified in a real browser**: React + TS + Vite,
+      `<model-viewer>` for interactive 3D, prompt form → live stage progress → result panel
+      → job library, all driven end to end with Playwright against the live orchestrator and
+      real generated assets — see [docs/UI.md](docs/UI.md) (also: pinned to Vite 5 after
+      Vite 8's default Rolldown bundler hit a native-binding wall, the fourth native-toolchain
+      issue this project has hit on this machine)
+- [ ] Phase 5 — hardening ← **next**
 
 ## Head start: Blender
 
