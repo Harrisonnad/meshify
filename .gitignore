@@ -16,6 +16,7 @@ weights/
 *.db
 *.sqlite
 *.sqlite3
+orchestrator/jobs.json
 
 # Python (per-worker venvs)
 venv/

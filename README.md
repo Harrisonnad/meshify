@@ -67,8 +67,12 @@ Single-worker queue: one GPU means concurrency buys nothing but OOM errors.
       [docs/PHASE2_WORKERS.md](docs/PHASE2_WORKERS.md) for the normal-map-baking deferral and
       a known decimation-breaks-watertightness tradeoff (matters for STL/printing, not GLB/FBX)
 - [x] **Phase 2 workers complete** (rig stays cut to v2 per DECISIONS.md)
-- [ ] Phase 3 — orchestrator ← **next**
-- [ ] Phase 4 — UI
+- [x] **Phase 3 — orchestrator built and validated**: Fastify + a flat JSON job store
+      (`better-sqlite3` couldn't build on this machine's toolchain — see
+      [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md)), single-worker sequential dispatch,
+      full recipe tracking. One `POST /jobs` call now chains imggen → meshgen → blender
+      automatically and produces real `.glb`/`.fbx`/`.stl` files end to end.
+- [ ] Phase 4 — UI ← **next**
 - [ ] Phase 5 — hardening
 
 ## Head start: Blender
