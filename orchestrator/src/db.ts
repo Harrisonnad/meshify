@@ -34,6 +34,7 @@ export interface JobRow {
   recipe: string; // JSON
   outputs: string; // JSON
   error: string | null;
+  retries: number; // count of automatic re-attempts so far, see MAX_RETRIES in pipeline.ts
   created_at: string;
   updated_at: string;
 }
@@ -49,12 +50,17 @@ export interface JobParams {
   scale?: number;
   origin?: "base" | "center";
   rig?: boolean; // opt-in: run the auto-rigging stage after cleaning (see docs/RIG.md)
+  smooth_iterations?: number; // Corrective Smooth pass in cleanup.py; 0 disables it
+  smooth_factor?: number;
+  bake_texture?: boolean; // opt-in: bake vertex colors into a UV texture instead of leaving them as-is
+  bake_size?: number;
 }
 
 function loadAll(): Map<string, JobRow> {
   if (!fs.existsSync(DB_PATH)) return new Map();
   const rows: JobRow[] = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
-  return new Map(rows.map((r) => [r.id, r]));
+  // Older job records predate the `retries` field — default it rather than propagate undefined.
+  return new Map(rows.map((r) => [r.id, { ...r, retries: r.retries ?? 0 }]));
 }
 
 function saveAll(jobs: Map<string, JobRow>): void {
@@ -72,6 +78,7 @@ export function insertJob(id: string, prompt: string, params: JobParams): JobRow
     recipe: "{}",
     outputs: "{}",
     error: null,
+    retries: 0,
     created_at: now,
     updated_at: now,
   };
@@ -93,7 +100,7 @@ export function listJobs(limit = 50): JobRow[] {
 
 export function updateJob(
   id: string,
-  patch: Partial<Pick<JobRow, "status" | "error">> & {
+  patch: Partial<Pick<JobRow, "status" | "error" | "retries">> & {
     recipePatch?: Record<string, unknown>;
     outputsPatch?: Record<string, unknown>;
   }
@@ -106,6 +113,7 @@ export function updateJob(
     ...current,
     status: patch.status ?? current.status,
     error: patch.error !== undefined ? patch.error : current.error,
+    retries: patch.retries ?? current.retries,
     recipe: patch.recipePatch
       ? JSON.stringify({ ...JSON.parse(current.recipe), ...patch.recipePatch })
       : current.recipe,

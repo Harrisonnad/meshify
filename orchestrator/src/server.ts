@@ -43,6 +43,7 @@ function serializeJob(row: JobRow) {
     outputs,
     urls,
     error: row.error,
+    retries: row.retries,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

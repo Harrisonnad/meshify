@@ -6,13 +6,33 @@ work, entirely unaffected by the 8GB/Turing limits that shape the rest of the pi
 docs/hardware.md) — see docs/PHASE2_WORKERS.md for why that makes it the lowest-risk stage.
 
 Normal-map baking (high-poly detail -> decimated low-poly) from the master plan's 2c list is
-deliberately NOT done here yet — it needs visual iteration to get bake margins/cage distance
-right, which isn't practical blind. Vertex colors are kept as-is for now; baking is a
-follow-up once there's a way to actually look at the result.
+still NOT done — that needs a high-poly cage and visual iteration on margins/cage distance.
+Vertex-color baking to a UV texture (the flat kind TripoSR actually produces) IS done, as an
+opt-in step (--bake-texture): it's a straight color transfer with no cage-distance guesswork,
+so it doesn't need the same blind-iteration caution.
+
+A Laplacian Smooth pass runs after decimation to soften the faceted, slightly-noisy surface
+marching-cubes reconstruction tends to leave on thin/disconnected geometry (see docs/MESH_GEN.md
+"Known limitation: surface noise" -- that roughness is baked into the reconstruction itself, not
+fixable via mesh-extraction or decimation parameters alone; MESH_GEN.md names this smoothing
+pass as one of the two real fixes). Laplacian Smooth specifically (with use_volume_preserve on),
+not Corrective Smooth: Corrective Smooth's default rest_source is 'ORCO', which on a mesh with
+no prior deforming modifier just corrects the smoothing against itself and ends up moving
+vertices by nothing (verified empirically -- max delta ~1e-7, i.e. floating-point noise).
+
+lambda_factor is far more sensitive at this mesh's ~1-unit scale than its 10.0 Blender-UI
+default suggests: verified empirically on the watering-can test asset (docs/MESH_GEN.md) that
+factor<=0.5 is visually a no-op, while factor>=10 melts the can into a blob (handle flattens,
+spout shrinks to a stub) within 1-5 iterations. factor=2/iterations=1 is the calibrated sweet
+spot -- softens the dents/ripples along the body while keeping the handle and spout recognizable.
+MESH_GEN.md already flags this kind of smoothing as "a blunt instrument that could soften real
+detail elsewhere too" -- these values are chosen to stay on the safe side of that trade-off, not
+to fully eliminate the ripple.
 
 Run:
   blender --background --python cleanup.py -- --input raw.glb --output-dir out/ --name asset
     [--target-tris 8000] [--scale 1.0] [--origin base|center]
+    [--smooth-iterations 1] [--smooth-factor 2.0] [--bake-texture] [--bake-size 1024]
 """
 import argparse
 import json
@@ -31,6 +51,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-tris", type=int, default=8000, help="Godot 4 low-poly default")
     parser.add_argument("--scale", type=float, default=1.0, help="Uniform scale factor")
     parser.add_argument("--origin", choices=["base", "center"], default="base")
+    parser.add_argument("--smooth-iterations", type=int, default=1, help="0 disables smoothing")
+    parser.add_argument("--smooth-factor", type=float, default=2.0, help="Laplacian lambda factor")
+    parser.add_argument("--bake-texture", action="store_true", help="Bake vertex colors to a UV texture")
+    parser.add_argument("--bake-size", type=int, default=1024)
     return parser.parse_args(argv)
 
 
@@ -66,6 +90,18 @@ def decimate(obj, target_tris: int) -> None:
     bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
+def smooth(obj, iterations: int, factor: float) -> None:
+    if iterations <= 0:
+        return
+    bpy.context.view_layer.objects.active = obj
+    mod = obj.modifiers.new(name="LaplacianSmooth", type="LAPLACIANSMOOTH")
+    mod.lambda_factor = factor
+    mod.iterations = iterations
+    mod.use_volume_preserve = True
+    mod.use_x = mod.use_y = mod.use_z = True
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
 def fix_normals(obj) -> None:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
@@ -83,6 +119,69 @@ def ensure_uvs(obj) -> None:
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.smart_project(angle_limit=1.15192)  # 66 degrees, Blender's default
     bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def bake_vertex_colors_to_texture(obj, output_dir: Path, name: str, bake_size: int) -> str | None:
+    """Bake the mesh's vertex-color attribute into a UV-mapped PNG, and rewire the object's
+    material to read that texture instead. No-op (returns None) if there's no vertex-color
+    attribute to bake — meshes without one are left exactly as they were.
+    """
+    color_attr = obj.data.color_attributes.active_color if obj.data.color_attributes else None
+    if color_attr is None:
+        return None
+
+    scene = bpy.context.scene
+    original_engine = scene.render.engine
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"  # GPU stays free for the ML workers; this is a one-off per job
+    scene.render.bake.margin = 16
+
+    mat = bpy.data.materials.new(name=f"{name}_bake")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    attr_node = nodes.new("ShaderNodeVertexColor")
+    attr_node.layer_name = color_attr.name
+    emit_node = nodes.new("ShaderNodeEmission")
+    output_node = nodes.new("ShaderNodeOutputMaterial")
+    links.new(attr_node.outputs["Color"], emit_node.inputs["Color"])
+    links.new(emit_node.outputs["Emission"], output_node.inputs["Surface"])
+
+    image = bpy.data.images.new(f"{name}_basecolor", width=bake_size, height=bake_size)
+    tex_node = nodes.new("ShaderNodeTexImage")
+    tex_node.image = image
+    nodes.active = tex_node
+
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.ops.object.bake(type="EMIT")
+
+    # Blender resolves a relative path against the (nonexistent, since nothing is ever saved
+    # here) .blend file location, not the process's CWD -- absolute is required for this to
+    # land next to the other exports instead of silently failing to write anything.
+    texture_path = (output_dir / f"{name}_basecolor.png").resolve()
+    image.filepath_raw = str(texture_path)
+    image.file_format = "PNG"
+    image.save()
+
+    # Rewire for export: Image Texture -> Base Color, so glTF export embeds the baked PNG
+    # rather than re-reading the (now-redundant) vertex-color attribute.
+    nodes.clear()
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    tex_node = nodes.new("ShaderNodeTexImage")
+    tex_node.image = image
+    output_node = nodes.new("ShaderNodeOutputMaterial")
+    links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+    links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
+
+    scene.render.engine = original_engine
+    return str(texture_path)
 
 
 def apply_scale_and_origin(obj, scale: float, origin: str) -> None:
@@ -134,18 +233,29 @@ def main() -> None:
 
     tris_before = sum(len(p.vertices) - 2 for p in obj.data.polygons)
     decimate(obj, args.target_tris)
+    smooth(obj, args.smooth_iterations, args.smooth_factor)
     fix_normals(obj)
     ensure_uvs(obj)
+
+    texture_path = None
+    if args.bake_texture:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        texture_path = bake_vertex_colors_to_texture(obj, output_dir, args.name, args.bake_size)
+
     apply_scale_and_origin(obj, args.scale, args.origin)
     tris_after = sum(len(p.vertices) - 2 for p in obj.data.polygons)
 
     paths = export_all(obj, Path(args.output_dir), args.name)
+    if texture_path:
+        paths["texture"] = texture_path
 
     # A single machine-readable line the wrapping worker can grep out of stdout.
     print("RESULT_JSON:" + json.dumps({
         "tris_before": tris_before,
         "tris_after": tris_after,
         "watertight": None,  # Blender doesn't check this directly; meshgen already confirmed it
+        "smoothed": args.smooth_iterations > 0,
         **paths,
     }))
 

@@ -103,6 +103,49 @@ textarea {
   cursor: pointer;
 }
 
+.advanced summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #a8a8ac;
+  user-select: none;
+}
+
+.advanced-grid {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.advanced-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: #a8a8ac;
+}
+
+.advanced-grid input {
+  padding: 0.35rem;
+  background: #14151a;
+  color: inherit;
+  border: 1px solid #2c2e35;
+  border-radius: 4px;
+  width: 8rem;
+}
+
+.rerun-button {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid #3d63dd;
+  color: #a9c1f7;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+}
+.rerun-button:hover:not(:disabled) {
+  background: #232630;
+}
+
 .form-row input[type="number"] {
   width: 6rem;
   padding: 0.35rem;

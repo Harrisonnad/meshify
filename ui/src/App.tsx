@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
-import { createJob, getHealth, getJob, listJobs, STAGE_LABELS, type HealthResponse, type Job } from "./api";
+import { createJob, getHealth, getJob, listJobs, STAGE_LABELS, type HealthResponse, type Job, type JobParams } from "./api";
 
 const TERMINAL_STATUSES = new Set(["done", "failed"]);
 
@@ -47,14 +47,25 @@ function StageProgress({ job }: { job: Job }) {
   );
 }
 
-function JobResult({ job }: { job: Job }) {
+function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) => void; rerunning: boolean }) {
   if (job.status === "failed") {
-    return <p className="error-text">Failed: {job.error}</p>;
+    return (
+      <div>
+        <p className="error-text">
+          Failed{job.retries > 0 ? ` (auto-retried ${job.retries}x)` : ""}: {job.error}
+        </p>
+        <button type="button" onClick={() => onRerun(job)} disabled={rerunning}>
+          {rerunning ? "Re-running…" : "Retry"}
+        </button>
+      </div>
+    );
   }
   if (job.status !== "done") return null;
 
   const meshgenMeta = job.recipe.meshgen as { tris?: number; watertight?: boolean } | undefined;
-  const blenderMeta = job.recipe.blender as { tris_before?: number; tris_after?: number } | undefined;
+  const blenderMeta = job.recipe.blender as
+    | { tris_before?: number; tris_after?: number; smoothed?: boolean; baked_texture?: boolean }
+    | undefined;
   const rigMeta = job.recipe.rig as { tris?: number; backend?: string } | undefined;
 
   // Prefer the rigged model in the viewer when one exists — it's the more complete asset.
@@ -78,7 +89,11 @@ function JobResult({ job }: { job: Job }) {
           {meshgenMeta?.tris?.toLocaleString() ?? "?"} tris, {meshgenMeta?.watertight ? "watertight" : "not watertight"}
         </dd>
         <dt>Cleaned mesh</dt>
-        <dd>{blenderMeta?.tris_after?.toLocaleString() ?? "?"} tris</dd>
+        <dd>
+          {blenderMeta?.tris_after?.toLocaleString() ?? "?"} tris
+          {blenderMeta?.smoothed ? ", smoothed" : ""}
+          {blenderMeta?.baked_texture ? ", baked texture" : ""}
+        </dd>
         {rigMeta && (
           <>
             <dt>Rigged</dt>
@@ -87,14 +102,23 @@ function JobResult({ job }: { job: Job }) {
         )}
       </dl>
       <div className="downloads">
-        {(["glb", "fbx", "stl", "rigged", "image"] as const).map(
+        {(["glb", "fbx", "stl", "rigged", "texture", "image"] as const).map(
           (key) =>
             job.urls[key] && (
               <a key={key} href={job.urls[key]} target="_blank" rel="noreferrer">
-                {key === "rigged" ? "RIGGED GLB" : key.toUpperCase()}
+                {key === "rigged" ? "RIGGED GLB" : key === "texture" ? "TEXTURE" : key.toUpperCase()}
               </a>
             )
         )}
+        <button
+          type="button"
+          className="rerun-button"
+          onClick={() => onRerun(job)}
+          disabled={rerunning}
+          title="Re-run with the same prompt and settings, including the exact seed that produced this result"
+        >
+          {rerunning ? "Re-running…" : "Re-run (same seed)"}
+        </button>
       </div>
     </div>
   );
@@ -119,10 +143,17 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [targetTris, setTargetTris] = useState(8000);
   const [rig, setRig] = useState(false);
+  const [bakeTexture, setBakeTexture] = useState(false);
+  const [seed, setSeed] = useState("");
+  const [resolution, setResolution] = useState(256);
+  const [threshold, setThreshold] = useState(25.0);
+  const [smoothIterations, setSmoothIterations] = useState(1);
+  const [smoothFactor, setSmoothFactor] = useState(2);
   const [job, setJob] = useState<Job | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const refreshLibrary = () => listJobs().then(setJobs).catch(() => {});
@@ -155,13 +186,43 @@ export default function App() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const created = await createJob(prompt.trim(), { target_tris: targetTris, rig });
+      const params: JobParams = {
+        target_tris: targetTris,
+        rig,
+        resolution,
+        threshold,
+        smooth_iterations: smoothIterations,
+        smooth_factor: smoothFactor,
+        bake_texture: bakeTexture,
+      };
+      if (seed.trim()) params.seed = Number(seed.trim());
+      const created = await createJob(prompt.trim(), params);
       setJob(created);
       refreshLibrary();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // Re-run uses the exact seed recorded in the source job's recipe (not just its requested
+  // params, which may have been left blank for a random roll) — that's what makes this a
+  // true reproduction rather than just "try the same prompt again."
+  async function handleRerun(source: Job) {
+    setRerunning(true);
+    setSubmitError(null);
+    try {
+      const imggenMeta = source.recipe.imggen as { seed?: number } | undefined;
+      const params: JobParams = { ...source.params };
+      if (imggenMeta?.seed !== undefined) params.seed = imggenMeta.seed;
+      const created = await createJob(source.prompt, params);
+      setJob(created);
+      refreshLibrary();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRerunning(false);
     }
   }
 
@@ -197,17 +258,82 @@ export default function App() {
                 <input type="checkbox" checked={rig} onChange={(e) => setRig(e.target.checked)} />
                 Auto-rig (characters only)
               </label>
+              <label className="checkbox-label" title="Bakes the mesh's per-vertex colors into a UV-mapped image texture instead of leaving them as vertex colors. Adds a Cycles render pass, so it takes longer.">
+                <input type="checkbox" checked={bakeTexture} onChange={(e) => setBakeTexture(e.target.checked)} />
+                Bake texture
+              </label>
               <button type="submit" disabled={submitting || !prompt.trim()}>
                 {submitting ? "Submitting…" : "Generate"}
               </button>
             </div>
+
+            <details className="advanced">
+              <summary>Advanced</summary>
+              <div className="advanced-grid">
+                <label>
+                  Seed
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="random"
+                    value={seed}
+                    onChange={(e) => setSeed(e.target.value.replace(/[^0-9]/g, ""))}
+                  />
+                </label>
+                <label>
+                  Mesh resolution
+                  <input
+                    type="number"
+                    min={64}
+                    max={512}
+                    step={32}
+                    value={resolution}
+                    onChange={(e) => setResolution(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Mesh threshold
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={threshold}
+                    onChange={(e) => setThreshold(Number(e.target.value))}
+                  />
+                </label>
+                <label title="Corrective Smooth passes after decimation, to soften marching-cubes noise. 0 disables it.">
+                  Smoothing iterations
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={smoothIterations}
+                    onChange={(e) => setSmoothIterations(Number(e.target.value))}
+                  />
+                </label>
+                <label title="Laplacian smoothing strength per iteration.">
+                  Smoothing factor
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={smoothFactor}
+                    onChange={(e) => setSmoothFactor(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            </details>
+
             {submitError && <p className="error-text">{submitError}</p>}
           </form>
 
           {job && (
             <section className="job-panel">
               <StageProgress job={job} />
-              <JobResult job={job} />
+              <JobResult job={job} onRerun={handleRerun} rerunning={rerunning} />
             </section>
           )}
         </main>

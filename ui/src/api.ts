@@ -14,6 +14,10 @@ export interface JobParams {
   scale?: number;
   origin?: "base" | "center";
   rig?: boolean;
+  smooth_iterations?: number;
+  smooth_factor?: number;
+  bake_texture?: boolean;
+  bake_size?: number;
 }
 
 export interface Job {
@@ -25,6 +29,7 @@ export interface Job {
   outputs: Record<string, string>;
   urls: Record<string, string>;
   error: string | null;
+  retries: number;
   created_at: string;
   updated_at: string;
 }

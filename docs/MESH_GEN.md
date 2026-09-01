@@ -130,12 +130,17 @@ model — more mesh resolution just captures the noise in more detail rather tha
 **Accepted as a v1 quality ceiling** for geometrically complex, thin-featured subjects;
 chunky/simple shapes (the tractor) don't show this problem.
 
-Two real fixes exist, both deferred:
-- A smoothing pass (Laplacian/vertex smooth) in the Blender cleanup worker — cheap, no new
-  dependencies, but a blunt instrument that could soften real detail elsewhere too.
+Two real fixes were identified; the first has since shipped:
+- **Done**: a Laplacian Smooth pass in `workers/blender/cleanup.py` (opt-out via
+  `--smooth-iterations 0`), on by default at `iterations=1, factor=2.0`. Calibrated empirically
+  on this exact test asset — plain Blender defaults (`factor=10`) melt the can into a blob
+  within a few iterations at this mesh's ~1-unit scale; `factor<=0.5` is visually a no-op. The
+  chosen defaults visibly soften the body ripples and edge dents while keeping the handle and
+  spout recognizable, without eliminating the ripple entirely — it remains a blunt instrument,
+  per the original note below.
 - InstantMesh instead of TripoSR (see below) — likely handles thin geometry better since it
   reconstructs from multiple synthesized views internally rather than one, but carries real
-  setup risk on this hardware.
+  setup risk on this hardware. Still deferred.
 
 ## Still open (see DECISIONS.md)
 

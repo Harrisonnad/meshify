@@ -61,6 +61,10 @@ def run(req: RunRequest) -> dict:
     target_tris = req.params.get("target_tris", 8000)
     scale = req.params.get("scale", 1.0)
     origin = req.params.get("origin", "base")
+    smooth_iterations = req.params.get("smooth_iterations", 1)
+    smooth_factor = req.params.get("smooth_factor", 2.0)
+    bake_texture = bool(req.params.get("bake_texture", False))
+    bake_size = req.params.get("bake_size", 1024)
 
     job_dir = REPO_ROOT / "scratch" / req.job_id / "clean"
     name = req.params.get("name", "asset")
@@ -73,8 +77,16 @@ def run(req: RunRequest) -> dict:
         "--target-tris", str(target_tris),
         "--scale", str(scale),
         "--origin", origin,
+        "--smooth-iterations", str(smooth_iterations),
+        "--smooth-factor", str(smooth_factor),
+        "--bake-size", str(bake_size),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if bake_texture:
+        cmd.append("--bake-texture")
+    # Baking runs a Cycles render pass on top of everything else in cleanup.py, so it needs
+    # more headroom than the geometry-only 300s budget.
+    timeout = 600 if bake_texture else 300
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise HTTPException(502, {"error": f"blender exited {proc.returncode}: {proc.stderr[-2000:]}"})
 
@@ -83,13 +95,19 @@ def run(req: RunRequest) -> dict:
         raise HTTPException(502, {"error": "blender ran but produced no RESULT_JSON", "stdout": proc.stdout[-2000:]})
     result = json.loads(match.group(1))
 
+    outputs = {"glb": result["glb"], "fbx": result["fbx"], "stl": result["stl"]}
+    if result.get("texture"):
+        outputs["texture"] = result["texture"]
+
     return {
         "job_id": req.job_id,
-        "outputs": {"glb": result["glb"], "fbx": result["fbx"], "stl": result["stl"]},
+        "outputs": outputs,
         "meta": {
             "tris_before": result["tris_before"],
             "tris_after": result["tris_after"],
             "target_tris": target_tris,
+            "smoothed": result.get("smoothed", False),
+            "baked_texture": bool(result.get("texture")),
             "model": MODEL_NAME,
         },
     }

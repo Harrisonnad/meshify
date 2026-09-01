@@ -8,6 +8,11 @@
 import { getJob, getNextQueuedJob, updateJob, type JobParams } from "./db.js";
 import { runBlender, runImggen, runMeshgen, runRig } from "./workers.js";
 
+// Worker contract rule 4: "orchestrator owns retry, workers don't retry internally."
+// Capped low — a job that fails 3 times in a row is very unlikely to succeed on a 4th
+// identical attempt, and retrying forever would just mask a real bug as "still queued."
+const MAX_RETRIES = 2;
+
 let processing = false;
 
 export function kickQueue(): void {
@@ -41,8 +46,10 @@ async function runNext(): Promise<void> {
 
     updateJob(job.id, { status: "cleaning" });
     const clean = await runBlender(job.id, mesh.outputs.mesh, params);
+    const cleanOutputs: Record<string, string> = { glb: clean.outputs.glb, fbx: clean.outputs.fbx, stl: clean.outputs.stl };
+    if (clean.outputs.texture) cleanOutputs.texture = clean.outputs.texture;
     updateJob(job.id, {
-      outputsPatch: { glb: clean.outputs.glb, fbx: clean.outputs.fbx, stl: clean.outputs.stl },
+      outputsPatch: cleanOutputs,
       recipePatch: { blender: clean.meta },
     });
 
@@ -59,7 +66,17 @@ async function runNext(): Promise<void> {
 
     updateJob(job.id, { status: "done" });
   } catch (err) {
-    updateJob(job.id, { status: "failed", error: err instanceof Error ? err.message : String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    if (job.retries < MAX_RETRIES) {
+      // Back to the queue, not straight to "failed" — getNextQueuedJob will pick this up
+      // again on a later pass (behind anything already queued ahead of it).
+      updateJob(job.id, { status: "queued", retries: job.retries + 1, error: message });
+    } else {
+      updateJob(job.id, {
+        status: "failed",
+        error: `failed after ${job.retries} ${job.retries === 1 ? "retry" : "retries"}: ${message}`,
+      });
+    }
   }
 
   // A job finished (or failed) — see if another is waiting. Recursing here (rather than
