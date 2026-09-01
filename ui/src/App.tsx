@@ -26,7 +26,11 @@ function HealthBadge() {
 }
 
 function StageProgress({ job }: { job: Job }) {
-  const stages: Job["status"][] = ["queued", "generating_image", "meshing", "cleaning", "done"];
+  // "rigging" only ever happens when the job actually asked for it — leaving it in the list
+  // for non-rig jobs would show a stage that's permanently skipped, which reads as stuck.
+  const stages: Job["status"][] = job.params.rig
+    ? ["queued", "generating_image", "meshing", "cleaning", "rigging", "done"]
+    : ["queued", "generating_image", "meshing", "cleaning", "done"];
   const currentIndex = stages.indexOf(job.status);
 
   return (
@@ -51,12 +55,16 @@ function JobResult({ job }: { job: Job }) {
 
   const meshgenMeta = job.recipe.meshgen as { tris?: number; watertight?: boolean } | undefined;
   const blenderMeta = job.recipe.blender as { tris_before?: number; tris_after?: number } | undefined;
+  const rigMeta = job.recipe.rig as { tris?: number; backend?: string } | undefined;
+
+  // Prefer the rigged model in the viewer when one exists — it's the more complete asset.
+  const viewerSrc = job.urls.rigged ?? job.urls.glb;
 
   return (
     <div className="job-result">
-      {job.urls.glb && (
+      {viewerSrc && (
         <model-viewer
-          src={job.urls.glb}
+          src={viewerSrc}
           alt={job.prompt}
           camera-controls
           auto-rotate
@@ -71,13 +79,19 @@ function JobResult({ job }: { job: Job }) {
         </dd>
         <dt>Cleaned mesh</dt>
         <dd>{blenderMeta?.tris_after?.toLocaleString() ?? "?"} tris</dd>
+        {rigMeta && (
+          <>
+            <dt>Rigged</dt>
+            <dd>via {rigMeta.backend ?? "skintokens"}</dd>
+          </>
+        )}
       </dl>
       <div className="downloads">
-        {(["glb", "fbx", "stl", "image"] as const).map(
+        {(["glb", "fbx", "stl", "rigged", "image"] as const).map(
           (key) =>
             job.urls[key] && (
               <a key={key} href={job.urls[key]} target="_blank" rel="noreferrer">
-                {key.toUpperCase()}
+                {key === "rigged" ? "RIGGED GLB" : key.toUpperCase()}
               </a>
             )
         )}
@@ -104,6 +118,7 @@ function JobLibrary({ jobs, onSelect }: { jobs: Job[]; onSelect: (job: Job) => v
 export default function App() {
   const [prompt, setPrompt] = useState("");
   const [targetTris, setTargetTris] = useState(8000);
+  const [rig, setRig] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -140,7 +155,7 @@ export default function App() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const created = await createJob(prompt.trim(), { target_tris: targetTris });
+      const created = await createJob(prompt.trim(), { target_tris: targetTris, rig });
       setJob(created);
       refreshLibrary();
     } catch (err) {
@@ -177,6 +192,10 @@ export default function App() {
                   value={targetTris}
                   onChange={(e) => setTargetTris(Number(e.target.value))}
                 />
+              </label>
+              <label className="checkbox-label" title="Predicts a skeleton and skin weights. Only makes sense for character-shaped subjects — props, walls, and terrain don't need one.">
+                <input type="checkbox" checked={rig} onChange={(e) => setRig(e.target.checked)} />
+                Auto-rig (characters only)
               </label>
               <button type="submit" disabled={submitting || !prompt.trim()}>
                 {submitting ? "Submitting…" : "Generate"}

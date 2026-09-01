@@ -1,7 +1,7 @@
 // Thin client for the orchestrator's HTTP API — see docs/ORCHESTRATOR.md.
 const ORCHESTRATOR_URL = "http://127.0.0.1:8100";
 
-export type JobStatus = "queued" | "generating_image" | "meshing" | "cleaning" | "done" | "failed";
+export type JobStatus = "queued" | "generating_image" | "meshing" | "cleaning" | "rigging" | "done" | "failed";
 
 export interface JobParams {
   seed?: number;
@@ -13,6 +13,7 @@ export interface JobParams {
   target_tris?: number;
   scale?: number;
   origin?: "base" | "center";
+  rig?: boolean;
 }
 
 export interface Job {
@@ -37,7 +38,7 @@ export interface WorkerHealth {
 
 export interface HealthResponse {
   status: string;
-  workers: { imggen: WorkerHealth; meshgen: WorkerHealth; blender: WorkerHealth };
+  workers: { imggen: WorkerHealth; meshgen: WorkerHealth; blender: WorkerHealth; rig: WorkerHealth };
 }
 
 function assetUrl(path: string): string {
@@ -82,6 +83,7 @@ export const STAGE_LABELS: Record<JobStatus, string> = {
   generating_image: "Generating concept image",
   meshing: "Reconstructing mesh",
   cleaning: "Cleaning up and exporting",
+  rigging: "Auto-rigging",
   done: "Done",
   failed: "Failed",
 };

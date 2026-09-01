@@ -92,6 +92,17 @@ textarea {
   color: #a8a8ac;
 }
 
+.checkbox-label {
+  cursor: help;
+  flex: 1;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
 .form-row input[type="number"] {
   width: 6rem;
   padding: 0.35rem;
