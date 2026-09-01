@@ -6,6 +6,7 @@ const WORKER_URLS = {
   imggen: process.env.IMGGEN_URL ?? "http://127.0.0.1:8101",
   meshgen: process.env.MESHGEN_URL ?? "http://127.0.0.1:8102",
   blender: process.env.BLENDER_URL ?? "http://127.0.0.1:8104",
+  rig: process.env.RIG_URL ?? "http://127.0.0.1:8103",
 } as const;
 
 export type WorkerName = keyof typeof WORKER_URLS;
@@ -73,4 +74,17 @@ function wslToWindowsPath(p: string): string {
 
 export function runBlender(jobId: string, meshPath: string, params: Record<string, unknown>) {
   return callWorker("blender", jobId, { mesh: wslToWindowsPath(meshPath) }, { name: "asset", ...params });
+}
+
+// The mirror image of wslToWindowsPath: rig runs inside WSL2 but its input (the cleaned mesh)
+// comes from blender, which hands back a Windows-drive path. Same boundary, opposite direction.
+function windowsToWslPath(p: string): string {
+  const match = p.match(/^([a-z]):[\\/](.*)$/i);
+  if (!match) return p;
+  const [, drive, rest] = match;
+  return `/mnt/${drive.toLowerCase()}/${rest.replace(/\\/g, "/")}`;
+}
+
+export function runRig(jobId: string, meshPath: string, params: Record<string, unknown>) {
+  return callWorker("rig", jobId, { mesh: windowsToWslPath(meshPath) }, params);
 }

@@ -2,6 +2,12 @@
 # Master plan §7 / docs/WORKER_CONTRACT.md rule 5: "each worker ships requirements.lock and
 # records the upstream repo commit SHA" — these repos break constantly.
 #
+# Also used by the rig worker (workers/rig/server.py) — it imports ComfyUI's own modules
+# directly, so it isn't cleanly isolatable into its own venv the way the other workers are.
+# See docs/RIG.md for why. This lockfile does NOT include ComfyUI-SkinToken's own additional
+# deps (open3d, lightning, etc.) — those were installed into this same venv afterward; run
+# `uv pip freeze` again to capture the full current state if regenerating from scratch.
+#
 # Upstream: https://github.com/comfyanonymous/ComfyUI.git
 # Commit:   f938505952476e48a12687eac696cdc94d48a3fe
 # Captured: 2026-08-31, Python 3.11.16 (uv-managed, see docs/COMFYUI_SETUP.md)

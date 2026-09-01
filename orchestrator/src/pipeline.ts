@@ -6,7 +6,7 @@
 // is killed by hand. The `processing` lock below is the thing standing between "one GPU" and
 // that failure mode — do not make this concurrent.
 import { getJob, getNextQueuedJob, updateJob, type JobParams } from "./db.js";
-import { runBlender, runImggen, runMeshgen } from "./workers.js";
+import { runBlender, runImggen, runMeshgen, runRig } from "./workers.js";
 
 let processing = false;
 
@@ -45,6 +45,17 @@ async function runNext(): Promise<void> {
       outputsPatch: { glb: clean.outputs.glb, fbx: clean.outputs.fbx, stl: clean.outputs.stl },
       recipePatch: { blender: clean.meta },
     });
+
+    // Opt-in: most assets (props, walls, terrain) don't need a skeleton, per the original
+    // rationale in docs/DECISIONS.md — rigging only runs when a job explicitly asks for it.
+    if (params.rig) {
+      updateJob(job.id, { status: "rigging" });
+      const rig = await runRig(job.id, clean.outputs.glb, params);
+      updateJob(job.id, {
+        outputsPatch: { rigged: rig.outputs.rigged },
+        recipePatch: { rig: rig.meta },
+      });
+    }
 
     updateJob(job.id, { status: "done" });
   } catch (err) {

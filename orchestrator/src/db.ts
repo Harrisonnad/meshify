@@ -12,14 +12,17 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(fileURLToPath(import.meta.url), "../../../");
 const DB_PATH = path.join(REPO_ROOT, "orchestrator", "jobs.json");
 
-// Job states: queued -> generating_image -> meshing -> cleaning -> done | failed
-// (No concept-picker or rigging states yet — those are Phase 4 UI and v2 scope respectively;
-// see docs/DECISIONS.md.)
+// Job states: queued -> generating_image -> meshing -> cleaning -> [rigging] -> done | failed
+// "rigging" is skipped unless params.rig is true (see docs/RIG.md) — most assets (props,
+// walls, terrain) don't need a skeleton, per the original v2 rationale in docs/DECISIONS.md,
+// which this opt-in flag preserves even though rigging turned out to be viable after all.
+// No concept-picker state yet — that's Phase 4 UI scope.
 export type JobStatus =
   | "queued"
   | "generating_image"
   | "meshing"
   | "cleaning"
+  | "rigging"
   | "done"
   | "failed";
 
@@ -45,6 +48,7 @@ export interface JobParams {
   target_tris?: number;
   scale?: number;
   origin?: "base" | "center";
+  rig?: boolean; // opt-in: run the auto-rigging stage after cleaning (see docs/RIG.md)
 }
 
 function loadAll(): Map<string, JobRow> {

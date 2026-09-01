@@ -24,11 +24,23 @@ CUDA toolkit inside the distro. VRAM stays shared with the Windows desktop eithe
 Plan's own recommendation, and the UI is the part that gets iterated most. Reinforced by
 Harrison's day job being React/TypeScript. Fastify + SQLite, single worker.
 
-### Rigging — cut to v2
-Makes Phase 2 ~40% shorter. Props, crops, walls, and terrain — most of what Homestead
-Defense needs — don't need skeletons. Also defers the thorniest licensing review (several
-rigging models release code permissively but weights research-only), which matters because
-these assets go into games that get sold.
+### Rigging — cut to v2 (settled 2026-08-22), reversed 2026-09-01
+Original reasoning: makes Phase 2 ~40% shorter; props, crops, walls, and terrain — most of
+what Homestead Defense needs — don't need skeletons; defers the thorniest licensing review
+(several rigging models release code permissively but weights research-only), which matters
+because these assets go into games that get sold.
+
+**Update 2026-09-01: built and available after all.** UniRig (the master plan's pick) and the
+official SkinTokens repo are both genuinely blocked on this hardware (`flash-attn` needs
+SM 8.0+, we're Turing SM 7.5) — but the community `ComfyUI-SkinToken` wrapper gates flash-attn
+behind a working PyTorch SDPA fallback and runs fine. See [RIG.md](./RIG.md) for the full
+story, validation results (a correct 34-bone biped topology on a test character), and the
+VRAM finding (three sequentially-resident GPU workers coexist fine on this card). Kept
+**opt-in** (`params.rig`, default `false`) rather than made automatic — the original rationale
+that most assets don't need a skeleton still holds, this just removes "can't be done at all"
+as a reason to skip it when one does. The licensing review this decision originally deferred
+is still deferred — not yet done for SkinTokens' weights, same as everything else in
+[MASTER_PLAN.md](../MASTER_PLAN.md) §8.
 
 ### Target engine — both, Godot 4 defaults first
 Export GLB + FBX + STL from one Blender pass as the plan calls for, but default tri budget

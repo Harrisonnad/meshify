@@ -49,12 +49,13 @@ function serializeJob(row: JobRow) {
 }
 
 app.get("/health", async () => {
-  const [imggen, meshgen, blender] = await Promise.all([
+  const [imggen, meshgen, blender, rig] = await Promise.all([
     checkHealth("imggen"),
     checkHealth("meshgen"),
     checkHealth("blender"),
+    checkHealth("rig"),
   ]);
-  return { status: "ok", workers: { imggen, meshgen, blender } };
+  return { status: "ok", workers: { imggen, meshgen, blender, rig } };
 });
 
 app.post<{ Body: { prompt: string; params?: JobParams } }>("/jobs", async (req, reply) => {

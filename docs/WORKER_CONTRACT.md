@@ -46,13 +46,14 @@ Returns:
 
 | Port | Worker | Status |
 |---|---|---|
-| 8101 | imggen — text to image + background removal | stub |
-| 8102 | meshgen — image to mesh | stub |
-| 8103 | rig — skeleton + skin weights | **v2, not built** |
-| 8104 | blender — cleanup, bake, export | stub |
+| 8101 | imggen — text to image | built, see [PHASE2_WORKERS.md](./PHASE2_WORKERS.md) |
+| 8102 | meshgen — image to mesh | built, see [PHASE2_WORKERS.md](./PHASE2_WORKERS.md) |
+| 8103 | rig — skeleton + skin weights | built, opt-in, see [RIG.md](./RIG.md) |
+| 8104 | blender — cleanup, bake, export | built, see [PHASE2_WORKERS.md](./PHASE2_WORKERS.md) |
 
-Rigging is cut from v1 (see [DECISIONS.md](./DECISIONS.md)). Port 8103 is reserved so the
-sequence doesn't shuffle when it lands.
+Rigging (8103) was originally cut from v1 (see [DECISIONS.md](./DECISIONS.md)) but turned out
+viable after all — it's opt-in via `params.rig` rather than always run, since most assets
+don't need a skeleton.
 
 ## Stub mode
 
