@@ -129,6 +129,17 @@ compute that's dangerous, not concurrent memory residency.
       and would break rendering in any backface-culling engine. `fix_normals()` now takes a
       majority vote of face-normal-vs-centroid direction and flips the whole mesh back if the
       built-in heuristic got it backwards.
+- [x] **Preset animation library** (opt-in, `params.animate`, implies `params.rig`): bakes an
+      Idle + Walk clip onto the rigged skeleton via `skeleton_template="Mixamo"` naming, but
+      only after validating the renamed skeleton's hierarchy actually makes sense — see
+      [docs/ANIMATION.md](docs/ANIMATION.md) for two real bugs this caught: SkinTokens' own
+      Mixamo-template renamer silently produces nonsense past the first ~10 bones on
+      real-world topologies (verified: both real test rigs on hand fail validation and
+      correctly skip animating rather than risk a corrupted result), and a Blender 5.2
+      glTF-exporter bug that corrupts every action but the first when exporting multiple
+      actions directly (worked around via NLA tracks). The framework itself is verified
+      correct against a hand-built synthetic skeleton; real hit rate on actual generations is
+      low until SkinTokens' template mapping improves.
 - [ ] Master plan fully implemented — remaining stretch goals: 4-candidate concept picker,
       proper high-poly normal-map baking (needs a retained hi-poly cage + bake-margin tuning,
       not done blind), UI support for the rig option, license audit before shipping anything
@@ -151,10 +162,11 @@ funded cloud pipeline does that this one doesn't, and why:
   material-aware model; getting a real normal map needs a retained high-poly cage and the
   bake-margin/cage-distance tuning explicitly deferred in `workers/blender/cleanup.py`
   ("needs visual iteration... isn't practical blind").
-- **600+ preset animations + retargeting** — auto-rigging (skeleton + skin weights) exists;
-  a curated animation library and retargeting onto the generated skeleton does not. Plausible
-  without new ML dependencies (Blender's NLA + a handful of open-license mocap clips), just not
-  built yet.
+- **600+ preset animations + retargeting** — a small Idle + Walk library exists (opt-in,
+  `params.animate`), but hand-authored and gated behind a strict skeleton validation rather
+  than sourced/retargeted mocap — see [docs/ANIMATION.md](docs/ANIMATION.md). Real hit rate
+  on actual generations is currently low (a bug in SkinTokens' own bone-renaming feature, not
+  in this code); nowhere near Meshy's breadth or reliability.
 - **Text-to-texture on an uploaded model** (re-skin existing geometry from a prompt) — not
   attempted; would need a real new ML subsystem (depth/UV-projected diffusion), not a
   Blender-side addition like the rest of this list.

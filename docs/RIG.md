@@ -105,10 +105,19 @@ would be wasted on them. Set `params.rig: true` on `POST /jobs` to opt in.
 
 ## Still open
 
-- No UI checkbox yet for the `rig` param — currently API-only, matching `docs/UI.md`'s
-  "extend the UI once the backend grows a capability" principle.
-- Skeleton naming/retargeting templates (Mixamo, UE5) exist in `SkinTokenRigTrimesh`'s
-  `skeleton_template` param but aren't exposed through the worker/orchestrator yet — passed
-  through via `params` if a caller wants them today.
 - No test yet with an even heavier subject (e.g. a quadruped or a very high-poly character) —
   the VRAM finding above is specific to what was actually tested.
+
+## Skeleton naming templates: Mixamo/UE5 exist, but don't trust them blindly
+
+`SkinTokenRigTrimesh`'s `skeleton_template` param (`"Keep model names"` default, or
+`"Mixamo"`/`"Unreal Engine 5"`) is passed through via `params.skeleton_template`, and gets
+forced to `"Mixamo"` automatically when `params.animate` is requested (see
+[docs/ANIMATION.md](./ANIMATION.md)). **This renamer does not do real anatomical matching** —
+traced through the vendored source: it tries a geometric heuristic first, but silently falls
+back to overlaying a fixed template name list onto bones in their existing index order when
+that heuristic can't confidently match. Verified empirically on both real rigged outputs on
+hand: the first ~10 bones came out correctly named, everything past that didn't (e.g.
+`mixamorig:RightShoulder`'s renamed parent came back as `mixamorig:LeftHand`). Anything built
+on top of Mixamo/UE5 naming needs its own hierarchy validation before trusting it — see
+`workers/blender/animate.py`'s `validate_skeleton()` for the pattern.

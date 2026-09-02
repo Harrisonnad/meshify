@@ -1,7 +1,15 @@
 // Thin client for the orchestrator's HTTP API — see docs/ORCHESTRATOR.md.
 const ORCHESTRATOR_URL = "http://127.0.0.1:8100";
 
-export type JobStatus = "queued" | "generating_image" | "meshing" | "cleaning" | "rigging" | "done" | "failed";
+export type JobStatus =
+  | "queued"
+  | "generating_image"
+  | "meshing"
+  | "cleaning"
+  | "rigging"
+  | "animating"
+  | "done"
+  | "failed";
 
 export interface JobParams {
   seed?: number;
@@ -19,6 +27,8 @@ export interface JobParams {
   retopology?: boolean;
   bake_texture?: boolean;
   bake_size?: number;
+  animate?: boolean;
+  skeleton_template?: string;
 }
 
 export interface Job {
@@ -90,6 +100,7 @@ export const STAGE_LABELS: Record<JobStatus, string> = {
   meshing: "Reconstructing mesh",
   cleaning: "Cleaning up and exporting",
   rigging: "Auto-rigging",
+  animating: "Baking animations",
   done: "Done",
   failed: "Failed",
 };

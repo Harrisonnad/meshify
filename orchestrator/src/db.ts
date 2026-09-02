@@ -12,10 +12,12 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(fileURLToPath(import.meta.url), "../../../");
 const DB_PATH = path.join(REPO_ROOT, "orchestrator", "jobs.json");
 
-// Job states: queued -> generating_image -> meshing -> cleaning -> [rigging] -> done | failed
-// "rigging" is skipped unless params.rig is true (see docs/RIG.md) — most assets (props,
-// walls, terrain) don't need a skeleton, per the original v2 rationale in docs/DECISIONS.md,
-// which this opt-in flag preserves even though rigging turned out to be viable after all.
+// Job states: queued -> generating_image -> meshing -> cleaning -> [rigging] -> [animating] ->
+// done | failed. "rigging" is skipped unless params.rig is true (see docs/RIG.md) — most
+// assets (props, walls, terrain) don't need a skeleton, per the original v2 rationale in
+// docs/DECISIONS.md, which this opt-in flag preserves even though rigging turned out to be
+// viable after all. "animating" additionally requires params.animate (see docs/ANIMATION.md)
+// and only ever runs after rigging, since there's no skeleton to animate without one.
 // No concept-picker state yet — that's Phase 4 UI scope.
 export type JobStatus =
   | "queued"
@@ -23,6 +25,7 @@ export type JobStatus =
   | "meshing"
   | "cleaning"
   | "rigging"
+  | "animating"
   | "done"
   | "failed";
 
@@ -55,6 +58,8 @@ export interface JobParams {
   retopology?: boolean; // opt-in: QuadriFlow remesh for clean quad edge flow (see cleanup.py)
   bake_texture?: boolean; // opt-in: bake vertex colors + AO into UV textures instead of leaving them as-is
   bake_size?: number;
+  animate?: boolean; // opt-in: bake a preset Idle/Walk animation library after rigging (see docs/ANIMATION.md); implies rig
+  skeleton_template?: string; // passed through to the rig worker; forced to "Mixamo" when animate is set unless given explicitly
 }
 
 function loadAll(): Map<string, JobRow> {

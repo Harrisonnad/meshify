@@ -26,10 +26,19 @@ function HealthBadge() {
 }
 
 function StageProgress({ job }: { job: Job }) {
-  // "rigging" only ever happens when the job actually asked for it — leaving it in the list
-  // for non-rig jobs would show a stage that's permanently skipped, which reads as stuck.
+  // "rigging"/"animating" only ever happen when the job actually asked for them — leaving
+  // them in the list for jobs that didn't would show a stage that's permanently skipped,
+  // which reads as stuck.
   const stages: Job["status"][] = job.params.rig
-    ? ["queued", "generating_image", "meshing", "cleaning", "rigging", "done"]
+    ? [
+        "queued",
+        "generating_image",
+        "meshing",
+        "cleaning",
+        "rigging",
+        ...(job.params.animate ? (["animating"] as const) : []),
+        "done",
+      ]
     : ["queued", "generating_image", "meshing", "cleaning", "done"];
   const currentIndex = stages.indexOf(job.status);
 
@@ -73,9 +82,10 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
       }
     | undefined;
   const rigMeta = job.recipe.rig as { tris?: number; backend?: string } | undefined;
+  const animateMeta = job.recipe.animate as { animated?: boolean; clips?: string[] } | undefined;
 
-  // Prefer the rigged model in the viewer when one exists — it's the more complete asset.
-  const viewerSrc = job.urls.rigged ?? job.urls.glb;
+  // Prefer the most complete asset available in the viewer.
+  const viewerSrc = job.urls.animated ?? job.urls.rigged ?? job.urls.glb;
 
   return (
     <div className="job-result">
@@ -107,13 +117,31 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
             <dd>via {rigMeta.backend ?? "skintokens"}</dd>
           </>
         )}
+        {animateMeta && (
+          <>
+            <dt>Animations</dt>
+            <dd>
+              {animateMeta.animated
+                ? `baked: ${animateMeta.clips?.join(", ") ?? "?"}`
+                : "skipped — skeleton didn't map cleanly onto the animation template (see docs/ANIMATION.md)"}
+            </dd>
+          </>
+        )}
       </dl>
       <div className="downloads">
-        {(["glb", "fbx", "stl", "rigged", "texture", "ao", "image"] as const).map(
+        {(["glb", "fbx", "stl", "rigged", "animated", "texture", "ao", "image"] as const).map(
           (key) =>
             job.urls[key] && (
               <a key={key} href={job.urls[key]} target="_blank" rel="noreferrer">
-                {key === "rigged" ? "RIGGED GLB" : key === "texture" ? "TEXTURE" : key === "ao" ? "AO MAP" : key.toUpperCase()}
+                {key === "rigged"
+                  ? "RIGGED GLB"
+                  : key === "animated"
+                    ? "ANIMATED GLB"
+                    : key === "texture"
+                      ? "TEXTURE"
+                      : key === "ao"
+                        ? "AO MAP"
+                        : key.toUpperCase()}
               </a>
             )
         )}
@@ -150,6 +178,7 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [targetTris, setTargetTris] = useState(8000);
   const [rig, setRig] = useState(false);
+  const [animate, setAnimate] = useState(false);
   const [retopology, setRetopology] = useState(false);
   const [bakeTexture, setBakeTexture] = useState(false);
   const [seed, setSeed] = useState("");
@@ -203,6 +232,7 @@ export default function App() {
         smooth_factor: smoothFactor,
         retopology,
         bake_texture: bakeTexture,
+        animate,
       };
       if (seed.trim()) params.seed = Number(seed.trim());
       const created = await createJob(prompt.trim(), params);
@@ -264,8 +294,29 @@ export default function App() {
                 />
               </label>
               <label className="checkbox-label" title="Predicts a skeleton and skin weights. Only makes sense for character-shaped subjects — props, walls, and terrain don't need one.">
-                <input type="checkbox" checked={rig} onChange={(e) => setRig(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={rig}
+                  onChange={(e) => {
+                    setRig(e.target.checked);
+                    if (!e.target.checked) setAnimate(false); // animate needs a skeleton to animate
+                  }}
+                />
                 Auto-rig (characters only)
+              </label>
+              <label
+                className="checkbox-label"
+                title="Bakes a preset Idle + Walk animation library onto the rig. Only works when the predicted skeleton maps cleanly onto a standard bone-naming template — often skipped for now (see docs/ANIMATION.md); the job still succeeds either way."
+              >
+                <input
+                  type="checkbox"
+                  checked={animate}
+                  onChange={(e) => {
+                    setAnimate(e.target.checked);
+                    if (e.target.checked) setRig(true); // animate implies rig
+                  }}
+                />
+                Add animations (Idle, Walk)
               </label>
               <label className="checkbox-label" title="Bakes the mesh's per-vertex colors into a UV-mapped image texture instead of leaving them as vertex colors. Adds a Cycles render pass, so it takes longer.">
                 <input type="checkbox" checked={bakeTexture} onChange={(e) => setBakeTexture(e.target.checked)} />

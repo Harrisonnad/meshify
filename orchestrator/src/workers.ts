@@ -88,3 +88,15 @@ function windowsToWslPath(p: string): string {
 export function runRig(jobId: string, meshPath: string, params: Record<string, unknown>) {
   return callWorker("rig", jobId, { mesh: windowsToWslPath(meshPath) }, params);
 }
+
+// rig runs inside WSL2 and hands back a WSL-style path, same as meshgen -- animate runs as a
+// second capability of the (native Windows) blender worker, so this needs the same
+// wslToWindowsPath translation runBlender already does for meshgen's output.
+export function runAnimate(jobId: string, riggedPath: string, params: Record<string, unknown>) {
+  return callWorker(
+    "blender",
+    jobId,
+    { mesh: wslToWindowsPath(riggedPath) },
+    { name: "asset", ...params, task: "animate" }
+  );
+}

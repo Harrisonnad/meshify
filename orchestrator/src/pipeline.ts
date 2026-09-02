@@ -6,7 +6,7 @@
 // is killed by hand. The `processing` lock below is the thing standing between "one GPU" and
 // that failure mode — do not make this concurrent.
 import { getJob, getNextQueuedJob, updateJob, type JobParams } from "./db.js";
-import { runBlender, runImggen, runMeshgen, runRig } from "./workers.js";
+import { runAnimate, runBlender, runImggen, runMeshgen, runRig } from "./workers.js";
 
 // Worker contract rule 4: "orchestrator owns retry, workers don't retry internally."
 // Capped low — a job that fails 3 times in a row is very unlikely to succeed on a 4th
@@ -56,13 +56,37 @@ async function runNext(): Promise<void> {
 
     // Opt-in: most assets (props, walls, terrain) don't need a skeleton, per the original
     // rationale in docs/DECISIONS.md — rigging only runs when a job explicitly asks for it.
-    if (params.rig) {
+    // animate implies rig -- there's no skeleton to animate without one.
+    if (params.rig || params.animate) {
       updateJob(job.id, { status: "rigging" });
-      const rig = await runRig(job.id, clean.outputs.glb, params);
+      // Mixamo naming is what animate.py's validation checks against (see docs/ANIMATION.md);
+      // only forced when animate was actually requested so a plain rig-only job's bone naming
+      // is unaffected. A caller-supplied skeleton_template is never overridden.
+      const rigParams: JobParams =
+        params.animate && !params.skeleton_template
+          ? { ...params, skeleton_template: "Mixamo" }
+          : params;
+      const rig = await runRig(job.id, clean.outputs.glb, rigParams);
       updateJob(job.id, {
         outputsPatch: { rigged: rig.outputs.rigged },
         recipePatch: { rig: rig.meta },
       });
+
+      if (params.animate) {
+        updateJob(job.id, { status: "animating" });
+        const anim = await runAnimate(job.id, rig.outputs.rigged, params);
+        if (anim.outputs.animated) {
+          updateJob(job.id, {
+            outputsPatch: { animated: anim.outputs.animated },
+            recipePatch: { animate: anim.meta },
+          });
+        } else {
+          // Not a failure -- animate.py validated the skeleton and correctly declined to
+          // guess at a mapping it couldn't trust (see docs/ANIMATION.md). The job still
+          // succeeds; it just has no animated clip alongside the static rigged model.
+          updateJob(job.id, { recipePatch: { animate: anim.meta } });
+        }
+      }
     }
 
     updateJob(job.id, { status: "done" });
