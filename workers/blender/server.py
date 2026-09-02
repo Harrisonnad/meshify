@@ -63,8 +63,9 @@ def run(req: RunRequest) -> dict:
     origin = req.params.get("origin", "base")
     smooth_iterations = req.params.get("smooth_iterations", 1)
     smooth_factor = req.params.get("smooth_factor", 2.0)
+    retopology = bool(req.params.get("retopology", False))
     bake_texture = bool(req.params.get("bake_texture", False))
-    bake_size = req.params.get("bake_size", 1024)
+    bake_size = req.params.get("bake_size", 2048)
 
     job_dir = REPO_ROOT / "scratch" / req.job_id / "clean"
     name = req.params.get("name", "asset")
@@ -81,11 +82,13 @@ def run(req: RunRequest) -> dict:
         "--smooth-factor", str(smooth_factor),
         "--bake-size", str(bake_size),
     ]
+    if retopology:
+        cmd.append("--retopology")
     if bake_texture:
         cmd.append("--bake-texture")
-    # Baking runs a Cycles render pass on top of everything else in cleanup.py, so it needs
-    # more headroom than the geometry-only 300s budget.
-    timeout = 600 if bake_texture else 300
+    # QuadriFlow remeshing and/or the Cycles bake passes run on top of everything else in
+    # cleanup.py, so either one needs more headroom than the geometry-only 300s budget.
+    timeout = 600 if (bake_texture or retopology) else 300
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise HTTPException(502, {"error": f"blender exited {proc.returncode}: {proc.stderr[-2000:]}"})
@@ -98,6 +101,8 @@ def run(req: RunRequest) -> dict:
     outputs = {"glb": result["glb"], "fbx": result["fbx"], "stl": result["stl"]}
     if result.get("texture"):
         outputs["texture"] = result["texture"]
+    if result.get("ao"):
+        outputs["ao"] = result["ao"]
 
     return {
         "job_id": req.job_id,
@@ -107,6 +112,7 @@ def run(req: RunRequest) -> dict:
             "tris_after": result["tris_after"],
             "target_tris": target_tris,
             "smoothed": result.get("smoothed", False),
+            "retopologized": result.get("retopologized", False),
             "baked_texture": bool(result.get("texture")),
             "model": MODEL_NAME,
         },

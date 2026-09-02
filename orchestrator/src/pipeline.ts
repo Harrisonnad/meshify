@@ -48,6 +48,7 @@ async function runNext(): Promise<void> {
     const clean = await runBlender(job.id, mesh.outputs.mesh, params);
     const cleanOutputs: Record<string, string> = { glb: clean.outputs.glb, fbx: clean.outputs.fbx, stl: clean.outputs.stl };
     if (clean.outputs.texture) cleanOutputs.texture = clean.outputs.texture;
+    if (clean.outputs.ao) cleanOutputs.ao = clean.outputs.ao;
     updateJob(job.id, {
       outputsPatch: cleanOutputs,
       recipePatch: { blender: clean.meta },

@@ -29,10 +29,33 @@ MESH_GEN.md already flags this kind of smoothing as "a blunt instrument that cou
 detail elsewhere too" -- these values are chosen to stay on the safe side of that trade-off, not
 to fully eliminate the ripple.
 
+Retopology (--retopology) runs Blender's built-in QuadriFlow remesher after decimation/
+smoothing, trading the ratio-decimate's triangle soup for game-artist-style quad edge flow at
+roughly the same tri budget. QuadriFlow requires manifold input with consistent face normals —
+that's exactly what fix_normals() already guarantees, which is why retopology runs after it,
+not before. QuadriFlow also throws away UVs and vertex colors as a side effect of generating
+new topology, so retopologize() transfers the vertex-color attribute onto the new mesh from a
+pre-remesh duplicate before discarding it (verified empirically: colors survive intact, indexed
+by nearest source polygon normal), and ensure_uvs() naturally regenerates UVs afterward since
+none remain. If QuadriFlow can't remesh the input (rare, but possible after heavy smoothing
+distorts thin geometry into a non-manifold state), retopologize() leaves the mesh as-is rather
+than failing the job.
+
+fix_normals() runs again after a successful retopology, and does more than the single
+`normals_make_consistent(inside=False)` call its name implies: verified empirically that on a
+QuadriFlow-remeshed watering-can mesh, that call's outward/inward heuristic got it backwards
+100% of the time (every face pointing inward) -- invisible to a plain vertex-color EMIT bake
+(which doesn't care about normal direction) but fatal to the AO bake added alongside it (an
+inverted mesh reads as almost fully self-occluded, i.e. solid black) and would equally break
+rendering in any backface-culling game engine. fix_normals() now checks the result with a
+majority vote of (face-center - mesh-centroid)·normal across all polygons and flips the whole
+mesh if most disagree, before shading.
+
 Run:
   blender --background --python cleanup.py -- --input raw.glb --output-dir out/ --name asset
     [--target-tris 8000] [--scale 1.0] [--origin base|center]
-    [--smooth-iterations 1] [--smooth-factor 2.0] [--bake-texture] [--bake-size 1024]
+    [--smooth-iterations 1] [--smooth-factor 2.0] [--retopology]
+    [--bake-texture] [--bake-size 2048]
 """
 import argparse
 import json
@@ -40,6 +63,7 @@ import sys
 from pathlib import Path
 
 import bpy
+import mathutils
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,8 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--origin", choices=["base", "center"], default="base")
     parser.add_argument("--smooth-iterations", type=int, default=1, help="0 disables smoothing")
     parser.add_argument("--smooth-factor", type=float, default=2.0, help="Laplacian lambda factor")
+    parser.add_argument("--retopology", action="store_true", help="QuadriFlow remesh for clean quad edge flow")
     parser.add_argument("--bake-texture", action="store_true", help="Bake vertex colors to a UV texture")
-    parser.add_argument("--bake-size", type=int, default=1024)
+    parser.add_argument("--bake-size", type=int, default=2048)
     return parser.parse_args(argv)
 
 
@@ -102,12 +127,75 @@ def smooth(obj, iterations: int, factor: float) -> None:
     bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
+def retopologize(obj, target_faces: int) -> bool:
+    """QuadriFlow-remesh obj to ~target_faces quads, preserving its vertex colors across the
+    remesh via a data-transfer from a pre-remesh duplicate. Returns whether it actually ran —
+    QuadriFlow can decline (non-manifold input) without raising, and the caller needs to know
+    whether normals/UVs need regenerating.
+    """
+    if target_faces <= 0:
+        return False
+
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.duplicate()
+    color_source = bpy.context.view_layer.objects.active
+    had_colors = bool(color_source.data.color_attributes)
+
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    result = bpy.ops.object.quadriflow_remesh(
+        target_faces=target_faces,
+        use_mesh_symmetry=False,
+        use_preserve_sharp=False,
+        use_preserve_boundary=False,
+    )
+    if result != {"FINISHED"}:
+        bpy.ops.object.select_all(action="DESELECT")
+        color_source.select_set(True)
+        bpy.context.view_layer.objects.active = color_source
+        bpy.ops.object.delete()
+        bpy.context.view_layer.objects.active = obj
+        return False
+
+    if had_colors:
+        # object.data_transfer transfers FROM the active object TO the other selected ones —
+        # opposite convention from the DATA_TRANSFER modifier's own .object field.
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        color_source.select_set(True)
+        bpy.context.view_layer.objects.active = color_source
+        bpy.ops.object.data_transfer(data_type="COLOR_CORNER", loop_mapping="NEAREST_POLYNOR", use_create=True)
+
+    bpy.ops.object.select_all(action="DESELECT")
+    color_source.select_set(True)
+    bpy.context.view_layer.objects.active = color_source
+    bpy.ops.object.delete()
+    bpy.context.view_layer.objects.active = obj
+    return True
+
+
 def fix_normals(obj) -> None:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.mesh.normals_make_consistent(inside=False)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+    # normals_make_consistent's outward/inward choice is a heuristic and can get it backwards
+    # on freshly-generated topology (verified: 100% inward on a QuadriFlow-remeshed mesh) --
+    # a majority vote against the mesh centroid catches and corrects a globally-inverted result.
+    mesh = obj.data
+    center = sum((v.co for v in mesh.vertices), mathutils.Vector()) / len(mesh.vertices)
+    inward = sum(1 for p in mesh.polygons if (p.center - center).dot(p.normal) <= 0)
+    if inward > len(mesh.polygons) / 2:
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.flip_normals()
+        bpy.ops.object.mode_set(mode="OBJECT")
+
     bpy.ops.object.shade_smooth()
 
 
@@ -121,14 +209,17 @@ def ensure_uvs(obj) -> None:
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def bake_vertex_colors_to_texture(obj, output_dir: Path, name: str, bake_size: int) -> str | None:
-    """Bake the mesh's vertex-color attribute into a UV-mapped PNG, and rewire the object's
-    material to read that texture instead. No-op (returns None) if there's no vertex-color
-    attribute to bake — meshes without one are left exactly as they were.
+def bake_textures(obj, output_dir: Path, name: str, bake_size: int) -> dict:
+    """Bake the mesh's vertex-color attribute into a UV-mapped base-color PNG, plus a real
+    ambient-occlusion map baked straight from the geometry, and rewire the object's material
+    to read the base-color texture instead of vertex colors. Returns {} (mesh left exactly as
+    it was) if there's no vertex-color attribute to bake; otherwise {"texture": ..., "ao": ...}.
+    AO is a real geometry-derived bake (Cycles' own AO pass), not a derived/heuristic map --
+    unlike a proper roughness or metallic map, it needs no material understanding to be correct.
     """
     color_attr = obj.data.color_attributes.active_color if obj.data.color_attributes else None
     if color_attr is None:
-        return None
+        return {}
 
     scene = bpy.context.scene
     original_engine = scene.render.engine
@@ -149,10 +240,10 @@ def bake_vertex_colors_to_texture(obj, output_dir: Path, name: str, bake_size: i
     links.new(attr_node.outputs["Color"], emit_node.inputs["Color"])
     links.new(emit_node.outputs["Emission"], output_node.inputs["Surface"])
 
-    image = bpy.data.images.new(f"{name}_basecolor", width=bake_size, height=bake_size)
-    tex_node = nodes.new("ShaderNodeTexImage")
-    tex_node.image = image
-    nodes.active = tex_node
+    color_image = bpy.data.images.new(f"{name}_basecolor", width=bake_size, height=bake_size)
+    color_tex_node = nodes.new("ShaderNodeTexImage")
+    color_tex_node.image = color_image
+    nodes.active = color_tex_node
 
     obj.data.materials.clear()
     obj.data.materials.append(mat)
@@ -166,22 +257,42 @@ def bake_vertex_colors_to_texture(obj, output_dir: Path, name: str, bake_size: i
     # here) .blend file location, not the process's CWD -- absolute is required for this to
     # land next to the other exports instead of silently failing to write anything.
     texture_path = (output_dir / f"{name}_basecolor.png").resolve()
-    image.filepath_raw = str(texture_path)
-    image.file_format = "PNG"
-    image.save()
+    color_image.filepath_raw = str(texture_path)
+    color_image.file_format = "PNG"
+    color_image.save()
+
+    # AO is a standalone geometry-driven bake type: it needs a target image node active in the
+    # material to know where to write, but doesn't care what the shader graph does, so it can
+    # reuse the same node tree without touching the base-color hookup yet.
+    ao_image = bpy.data.images.new(f"{name}_ao", width=bake_size, height=bake_size)
+    ao_tex_node = nodes.new("ShaderNodeTexImage")
+    ao_tex_node.image = ao_image
+    nodes.active = ao_tex_node
+    bpy.ops.object.bake(type="AO")
+
+    ao_path = (output_dir / f"{name}_ao.png").resolve()
+    ao_image.filepath_raw = str(ao_path)
+    ao_image.file_format = "PNG"
+    # Deliberately NOT marked Non-Color: verified empirically that doing so before save()
+    # writes near-black output (the raw linear AO factors are low enough that skipping the
+    # sRGB encode crushes them to ~0 in 8-bit). Default colorspace produces a correctly
+    # visible map; this is meant as a viewable/multiply-in AO texture, not a strict linear
+    # PBR channel.
+    ao_image.save()
+    nodes.remove(ao_tex_node)
 
     # Rewire for export: Image Texture -> Base Color, so glTF export embeds the baked PNG
     # rather than re-reading the (now-redundant) vertex-color attribute.
     nodes.clear()
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     tex_node = nodes.new("ShaderNodeTexImage")
-    tex_node.image = image
+    tex_node.image = color_image
     output_node = nodes.new("ShaderNodeOutputMaterial")
     links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
     links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
 
     scene.render.engine = original_engine
-    return str(texture_path)
+    return {"texture": str(texture_path), "ao": str(ao_path)}
 
 
 def apply_scale_and_origin(obj, scale: float, origin: str) -> None:
@@ -235,20 +346,26 @@ def main() -> None:
     decimate(obj, args.target_tris)
     smooth(obj, args.smooth_iterations, args.smooth_factor)
     fix_normals(obj)
+
+    retopologized = False
+    if args.retopology:
+        retopologized = retopologize(obj, max(args.target_tris // 2, 50))
+        if retopologized:
+            fix_normals(obj)  # remesh produces new geometry -- normals/shading need redoing
+
     ensure_uvs(obj)
 
-    texture_path = None
+    baked = {}
     if args.bake_texture:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        texture_path = bake_vertex_colors_to_texture(obj, output_dir, args.name, args.bake_size)
+        baked = bake_textures(obj, output_dir, args.name, args.bake_size)
 
     apply_scale_and_origin(obj, args.scale, args.origin)
     tris_after = sum(len(p.vertices) - 2 for p in obj.data.polygons)
 
     paths = export_all(obj, Path(args.output_dir), args.name)
-    if texture_path:
-        paths["texture"] = texture_path
+    paths.update(baked)
 
     # A single machine-readable line the wrapping worker can grep out of stdout.
     print("RESULT_JSON:" + json.dumps({
@@ -256,6 +373,7 @@ def main() -> None:
         "tris_after": tris_after,
         "watertight": None,  # Blender doesn't check this directly; meshgen already confirmed it
         "smoothed": args.smooth_iterations > 0,
+        "retopologized": retopologized,
         **paths,
     }))
 

@@ -16,6 +16,7 @@ export interface JobParams {
   rig?: boolean;
   smooth_iterations?: number;
   smooth_factor?: number;
+  retopology?: boolean;
   bake_texture?: boolean;
   bake_size?: number;
 }

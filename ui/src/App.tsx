@@ -64,7 +64,13 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
 
   const meshgenMeta = job.recipe.meshgen as { tris?: number; watertight?: boolean } | undefined;
   const blenderMeta = job.recipe.blender as
-    | { tris_before?: number; tris_after?: number; smoothed?: boolean; baked_texture?: boolean }
+    | {
+        tris_before?: number;
+        tris_after?: number;
+        smoothed?: boolean;
+        retopologized?: boolean;
+        baked_texture?: boolean;
+      }
     | undefined;
   const rigMeta = job.recipe.rig as { tris?: number; backend?: string } | undefined;
 
@@ -92,6 +98,7 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
         <dd>
           {blenderMeta?.tris_after?.toLocaleString() ?? "?"} tris
           {blenderMeta?.smoothed ? ", smoothed" : ""}
+          {blenderMeta?.retopologized ? ", retopologized" : ""}
           {blenderMeta?.baked_texture ? ", baked texture" : ""}
         </dd>
         {rigMeta && (
@@ -102,11 +109,11 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
         )}
       </dl>
       <div className="downloads">
-        {(["glb", "fbx", "stl", "rigged", "texture", "image"] as const).map(
+        {(["glb", "fbx", "stl", "rigged", "texture", "ao", "image"] as const).map(
           (key) =>
             job.urls[key] && (
               <a key={key} href={job.urls[key]} target="_blank" rel="noreferrer">
-                {key === "rigged" ? "RIGGED GLB" : key === "texture" ? "TEXTURE" : key.toUpperCase()}
+                {key === "rigged" ? "RIGGED GLB" : key === "texture" ? "TEXTURE" : key === "ao" ? "AO MAP" : key.toUpperCase()}
               </a>
             )
         )}
@@ -143,6 +150,7 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [targetTris, setTargetTris] = useState(8000);
   const [rig, setRig] = useState(false);
+  const [retopology, setRetopology] = useState(false);
   const [bakeTexture, setBakeTexture] = useState(false);
   const [seed, setSeed] = useState("");
   const [resolution, setResolution] = useState(256);
@@ -193,6 +201,7 @@ export default function App() {
         threshold,
         smooth_iterations: smoothIterations,
         smooth_factor: smoothFactor,
+        retopology,
         bake_texture: bakeTexture,
       };
       if (seed.trim()) params.seed = Number(seed.trim());
@@ -262,6 +271,10 @@ export default function App() {
                 <input type="checkbox" checked={bakeTexture} onChange={(e) => setBakeTexture(e.target.checked)} />
                 Bake texture
               </label>
+              <label className="checkbox-label" title="Runs a QuadriFlow remesh for game-artist-style quad edge flow instead of raw triangle decimation. Adds noticeable time (~5-10s) for a real topology-quality improvement.">
+                <input type="checkbox" checked={retopology} onChange={(e) => setRetopology(e.target.checked)} />
+                Retopology (quads)
+              </label>
               <button type="submit" disabled={submitting || !prompt.trim()}>
                 {submitting ? "Submitting…" : "Generate"}
               </button>
@@ -302,7 +315,7 @@ export default function App() {
                     onChange={(e) => setThreshold(Number(e.target.value))}
                   />
                 </label>
-                <label title="Corrective Smooth passes after decimation, to soften marching-cubes noise. 0 disables it.">
+                <label title="Laplacian smoothing passes after decimation, to soften marching-cubes noise. 0 disables it.">
                   Smoothing iterations
                   <input
                     type="number"

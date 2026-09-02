@@ -12,13 +12,15 @@ Prompt or image in; watertight-at-generation mesh, `.glb` / `.fbx` / `.stl` out,
 recipe (prompt, seed, model versions, settings) so any asset is reproducible. Auto-rigging is
 built and available as an opt-in stage (`params.rig`) — see [docs/RIG.md](docs/RIG.md).
 
-Color is vertex-color only, not baked PBR texture maps (albedo/normal/roughness/metallic) —
-the master plan's original texture target was never built; see
-[docs/MESH_GEN.md](docs/MESH_GEN.md) for what TripoSR actually outputs.
+Color is vertex-color by default; an opt-in bake step (`params.bake_texture`) converts that
+into a real UV-mapped base-color PNG plus a geometry-derived ambient-occlusion map. There is
+still no roughness, metallic, or normal map — those need either a real material-estimation
+model or (for normal maps) a retained high-poly cage and bake-margin tuning that hasn't been
+done yet; see "Compared to Meshy 7" below.
 
-**Still cut:** multi-object scenes, retopology to hand-authored quad density, face
-blendshapes, cloud/multi-user, a 4-candidate concept picker (backend supports one image per
-job only).
+**Still cut:** multi-object scenes, face blendshapes, cloud/multi-user, a 4-candidate concept
+picker (backend supports one image per job only). Retopology to clean quad edge flow is now
+available as an opt-in stage (`params.retopology`, QuadriFlow-based) — see below.
 
 ## The hardware situation, up front
 
@@ -112,9 +114,53 @@ compute that's dangerous, not concurrent memory residency.
       34-bone biped skeleton on a test character, and the full orchestrator pipeline
       (image → mesh → clean → rig) completes in ~2m13s with three sequentially-resident GPU
       workers coexisting fine — see [docs/RIG.md](docs/RIG.md).
+- [x] **Polish pass**: re-run-from-recipe, advanced settings (seed/resolution/threshold) in
+      the UI, orchestrator-owned retry (2 attempts before a job is marked failed), a Laplacian
+      Smooth pass for marching-cubes surface noise, and opt-in vertex-color-to-texture baking
+      (base color + a real AO map) — see [docs/MESH_GEN.md](docs/MESH_GEN.md) for how the
+      smoothing defaults were calibrated (naive Blender defaults either no-op or melt the test
+      asset into a blob) and the retopology entry below for a real bug this pass caught.
+- [x] **QuadriFlow retopology** (opt-in, `params.retopology`): swaps ratio-decimate's triangle
+      soup for game-artist-style quad edge flow at roughly the same tri budget, transferring
+      vertex colors onto the new topology via a data-transfer from a pre-remesh duplicate.
+      Caught a real bug in the process: `bpy.ops.mesh.normals_make_consistent(inside=False)`
+      flipped 100% of the remeshed watering-can's faces inward — invisible to the vertex-color
+      bake (which ignores normal direction) but would read as solid-black to the new AO bake
+      and would break rendering in any backface-culling engine. `fix_normals()` now takes a
+      majority vote of face-normal-vs-centroid direction and flips the whole mesh back if the
+      built-in heuristic got it backwards.
 - [ ] Master plan fully implemented — remaining stretch goals: 4-candidate concept picker,
-      normal-map baking, InstantMesh (blocked on this hardware's toolchain), UI support for
-      the rig option, license audit before shipping anything commercially (§8, not started)
+      proper high-poly normal-map baking (needs a retained hi-poly cage + bake-margin tuning,
+      not done blind), UI support for the rig option, license audit before shipping anything
+      commercially (§8, not started)
+
+## Compared to Meshy 7
+
+A commercial reference point ([meshy.ai](https://www.meshy.ai), v7 as of Jan 2026) for what a
+funded cloud pipeline does that this one doesn't, and why:
+
+- **Multi-image input** (1-4 photos → better back/side fidelity) — TripoSR is architecturally
+  single-view. A multi-view model exists (InstantMesh) but was investigated and deprioritized:
+  its `nvdiffrast` dependency compiles CUDA at install time, the same failure mode that made
+  `torchmcubes` unfixably incompatible with this machine's GCC/CUDA combo (see
+  [docs/MESH_GEN.md](docs/MESH_GEN.md)). Revisit only if TripoSR's quality ceiling becomes a
+  real blocker.
+- **True PBR texturing** (8K Multiview-Diffusion-generated albedo/roughness/metallic/normal) —
+  this pipeline's texture bake is a straight vertex-color transfer plus a real geometry-derived
+  AO map, not learned material estimation. Getting real roughness/metallic would need a
+  material-aware model; getting a real normal map needs a retained high-poly cage and the
+  bake-margin/cage-distance tuning explicitly deferred in `workers/blender/cleanup.py`
+  ("needs visual iteration... isn't practical blind").
+- **600+ preset animations + retargeting** — auto-rigging (skeleton + skin weights) exists;
+  a curated animation library and retargeting onto the generated skeleton does not. Plausible
+  without new ML dependencies (Blender's NLA + a handful of open-license mocap clips), just not
+  built yet.
+- **Text-to-texture on an uploaded model** (re-skin existing geometry from a prompt) — not
+  attempted; would need a real new ML subsystem (depth/UV-projected diffusion), not a
+  Blender-side addition like the rest of this list.
+- **Cloud speed/scale** — Meshy's ~1-minute full pipeline runs on a GPU farm; this pipeline is
+  single-GPU/single-worker by design (see "Architecture" above), trading throughput for running
+  entirely locally at zero marginal cost.
 
 ## Head start: Blender
 

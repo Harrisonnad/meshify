@@ -50,9 +50,10 @@ export interface JobParams {
   scale?: number;
   origin?: "base" | "center";
   rig?: boolean; // opt-in: run the auto-rigging stage after cleaning (see docs/RIG.md)
-  smooth_iterations?: number; // Corrective Smooth pass in cleanup.py; 0 disables it
+  smooth_iterations?: number; // Laplacian Smooth pass in cleanup.py; 0 disables it
   smooth_factor?: number;
-  bake_texture?: boolean; // opt-in: bake vertex colors into a UV texture instead of leaving them as-is
+  retopology?: boolean; // opt-in: QuadriFlow remesh for clean quad edge flow (see cleanup.py)
+  bake_texture?: boolean; // opt-in: bake vertex colors + AO into UV textures instead of leaving them as-is
   bake_size?: number;
 }
 
