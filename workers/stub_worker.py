@@ -82,7 +82,13 @@ async def run(req: RunRequest) -> dict:
             out = clean_dir / f"asset.{fmt}"
             out.write_bytes(FIXTURE_CUBE.read_bytes())
             outputs[fmt] = str(out)
-    else:  # meshgen (mesh), rig (v2, not wired into the orchestrator yet)
+    elif WORKER_NAME == "rig":
+        rig_dir = job_dir / "rig"
+        rig_dir.mkdir(exist_ok=True)
+        out = rig_dir / "rigged.glb"
+        out.write_bytes(FIXTURE_CUBE.read_bytes())
+        outputs = {"rigged": str(out)}
+    else:  # meshgen
         out = job_dir / "raw.glb"
         out.write_bytes(FIXTURE_CUBE.read_bytes())
         outputs = {"mesh": str(out)}

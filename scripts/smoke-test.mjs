@@ -2,15 +2,21 @@
 // Master plan section 7: "A GitHub Actions job that runs the orchestrator with stubbed
 // workers against a golden fixture — catches contract drift without needing a GPU runner."
 //
-// Assumes the orchestrator and all three stub workers (imggen/meshgen/blender, per
+// Assumes the orchestrator and all four stub workers (imggen/meshgen/blender/rig, per
 // docs/WORKER_CONTRACT.md's stub mode) are already running — see
 // .github/workflows/smoke-test.yml for how CI brings them up, or run manually:
 //
 //   .venv-stub/Scripts/python workers/stub_worker.py --worker imggen  --port 8101 &
 //   .venv-stub/Scripts/python workers/stub_worker.py --worker meshgen --port 8102 &
 //   .venv-stub/Scripts/python workers/stub_worker.py --worker blender --port 8104 &
+//   .venv-stub/Scripts/python workers/stub_worker.py --worker rig     --port 8103 &
 //   (cd orchestrator && npm start) &
 //   node scripts/smoke-test.mjs
+//
+// This job doesn't request params.rig/params.animate, so the rig stub only needs to exist
+// for /health to report every orchestrator-known worker as reachable -- it's not exercised
+// by the job flow below. Still required: the orchestrator's /health check (see server.ts)
+// reports on all four workers regardless of what any given job actually uses.
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL ?? "http://127.0.0.1:8100";
 const EXPECTED_OUTPUT_KEYS = ["image", "mesh", "glb", "fbx", "stl"];
 

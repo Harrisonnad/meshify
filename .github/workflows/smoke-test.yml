@@ -42,6 +42,7 @@ jobs:
           python workers/stub_worker.py --worker imggen  --port 8101 > imggen.log  2>&1 &
           python workers/stub_worker.py --worker meshgen --port 8102 > meshgen.log 2>&1 &
           python workers/stub_worker.py --worker blender --port 8104 > blender.log 2>&1 &
+          python workers/stub_worker.py --worker rig     --port 8103 > rig.log     2>&1 &
 
       - name: Start orchestrator
         working-directory: orchestrator
@@ -68,4 +69,5 @@ jobs:
           echo "--- imggen.log ---"; cat imggen.log || true
           echo "--- meshgen.log ---"; cat meshgen.log || true
           echo "--- blender.log ---"; cat blender.log || true
+          echo "--- rig.log ---"; cat rig.log || true
           echo "--- orchestrator.log ---"; cat orchestrator.log || true
