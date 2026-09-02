@@ -49,6 +49,7 @@ async function runNext(): Promise<void> {
     const cleanOutputs: Record<string, string> = { glb: clean.outputs.glb, fbx: clean.outputs.fbx, stl: clean.outputs.stl };
     if (clean.outputs.texture) cleanOutputs.texture = clean.outputs.texture;
     if (clean.outputs.ao) cleanOutputs.ao = clean.outputs.ao;
+    if (clean.outputs.normal) cleanOutputs.normal = clean.outputs.normal;
     updateJob(job.id, {
       outputsPatch: cleanOutputs,
       recipePatch: { blender: clean.meta },

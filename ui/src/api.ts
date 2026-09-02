@@ -26,7 +26,10 @@ export interface JobParams {
   smooth_factor?: number;
   retopology?: boolean;
   bake_texture?: boolean;
+  bake_normal?: boolean;
   bake_size?: number;
+  roughness_factor?: number;
+  metallic_factor?: number;
   animate?: boolean;
   skeleton_template?: string;
 }

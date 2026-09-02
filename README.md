@@ -13,10 +13,11 @@ recipe (prompt, seed, model versions, settings) so any asset is reproducible. Au
 built and available as an opt-in stage (`params.rig`) — see [docs/RIG.md](docs/RIG.md).
 
 Color is vertex-color by default; an opt-in bake step (`params.bake_texture`) converts that
-into a real UV-mapped base-color PNG plus a geometry-derived ambient-occlusion map. There is
-still no roughness, metallic, or normal map — those need either a real material-estimation
-model or (for normal maps) a retained high-poly cage and bake-margin tuning that hasn't been
-done yet; see "Compared to Meshy 7" below.
+into a real UV-mapped base-color PNG plus a geometry-derived ambient-occlusion map. A second
+opt-in step (`params.bake_normal`) bakes a real normal map from the retained high-poly source
+onto the final decimated mesh — see [docs/PBR.md](docs/PBR.md). Roughness/metallic are flat
+factors (`params.roughness_factor`/`metallic_factor`), not baked maps — real per-pixel values
+need a material-estimation model this project doesn't have; see "Compared to Meshy 7" below.
 
 **Still cut:** multi-object scenes, face blendshapes, cloud/multi-user, a 4-candidate concept
 picker (backend supports one image per job only). Retopology to clean quad edge flow is now
@@ -140,10 +141,21 @@ compute that's dangerous, not concurrent memory residency.
       actions directly (worked around via NLA tracks). The framework itself is verified
       correct against a hand-built synthetic skeleton; real hit rate on actual generations is
       low until SkinTokens' template mapping improves.
+- [x] **Real normal-map baking + PBR factors** (opt-in, `params.bake_normal`, plus
+      `roughness_factor`/`metallic_factor`): a full-resolution duplicate of the raw meshgen
+      output survives decimation/smoothing/retopology just for this, and a selected-to-active
+      Cycles bake transfers its detail onto the final low-poly's UVs — the piece explicitly
+      deferred earlier this project ("needs visual iteration... isn't practical blind") now
+      done with that iteration. See [docs/PBR.md](docs/PBR.md) for two real bugs this caught:
+      tagging a baked image `Non-Color` before saving corrupts the file, but only when other
+      bakes ran earlier in the same session (fixed: save first, tag after); and verifying —
+      not assuming — that a NORMAL bake, unlike AO, doesn't need color-management encoding on
+      save at all, since Blender treats it as a data pass rather than a light-transport
+      quantity. Roughness/metallic stay flat factors, not maps — real per-pixel values need a
+      material-estimation model out of scope here.
 - [ ] Master plan fully implemented — remaining stretch goals: 4-candidate concept picker,
-      proper high-poly normal-map baking (needs a retained hi-poly cage + bake-margin tuning,
-      not done blind), UI support for the rig option, license audit before shipping anything
-      commercially (§8, not started)
+      UI support for the rig option, license audit before shipping anything commercially
+      (§8, not started)
 
 ## Compared to Meshy 7
 
@@ -157,11 +169,10 @@ funded cloud pipeline does that this one doesn't, and why:
   [docs/MESH_GEN.md](docs/MESH_GEN.md)). Revisit only if TripoSR's quality ceiling becomes a
   real blocker.
 - **True PBR texturing** (8K Multiview-Diffusion-generated albedo/roughness/metallic/normal) —
-  this pipeline's texture bake is a straight vertex-color transfer plus a real geometry-derived
-  AO map, not learned material estimation. Getting real roughness/metallic would need a
-  material-aware model; getting a real normal map needs a retained high-poly cage and the
-  bake-margin/cage-distance tuning explicitly deferred in `workers/blender/cleanup.py`
-  ("needs visual iteration... isn't practical blind").
+  two of Meshy's four map types are real here now (albedo via vertex-color transfer, normal
+  via a real high-poly-to-low-poly bake — see [docs/PBR.md](docs/PBR.md)); roughness/metallic
+  are flat factors, not learned per-pixel material estimation, which is a genuinely different
+  scope of work (a model that understands what a surface is *made of*) not attempted.
 - **600+ preset animations + retargeting** — a small Idle + Walk library exists (opt-in,
   `params.animate`), but hand-authored and gated behind a strict skeleton validation rather
   than sourced/retargeted mocap — see [docs/ANIMATION.md](docs/ANIMATION.md). Real hit rate

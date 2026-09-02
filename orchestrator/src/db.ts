@@ -57,7 +57,10 @@ export interface JobParams {
   smooth_factor?: number;
   retopology?: boolean; // opt-in: QuadriFlow remesh for clean quad edge flow (see cleanup.py)
   bake_texture?: boolean; // opt-in: bake vertex colors + AO into UV textures instead of leaving them as-is
+  bake_normal?: boolean; // opt-in: bake a real normal map from the retained high-poly source (see docs/PBR.md)
   bake_size?: number;
+  roughness_factor?: number; // flat PBR factor, not a baked map -- see docs/PBR.md
+  metallic_factor?: number;
   animate?: boolean; // opt-in: bake a preset Idle/Walk animation library after rigging (see docs/ANIMATION.md); implies rig
   skeleton_template?: string; // passed through to the rig worker; forced to "Mixamo" when animate is set unless given explicitly
 }

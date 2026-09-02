@@ -79,6 +79,9 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
         smoothed?: boolean;
         retopologized?: boolean;
         baked_texture?: boolean;
+        baked_normal?: boolean;
+        roughness_factor?: number;
+        metallic_factor?: number;
       }
     | undefined;
   const rigMeta = job.recipe.rig as { tris?: number; backend?: string } | undefined;
@@ -110,6 +113,10 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
           {blenderMeta?.smoothed ? ", smoothed" : ""}
           {blenderMeta?.retopologized ? ", retopologized" : ""}
           {blenderMeta?.baked_texture ? ", baked texture" : ""}
+          {blenderMeta?.baked_normal ? ", baked normal map" : ""}
+          {blenderMeta?.roughness_factor !== undefined
+            ? `, roughness ${blenderMeta.roughness_factor}/metallic ${blenderMeta.metallic_factor ?? 0}`
+            : ""}
         </dd>
         {rigMeta && (
           <>
@@ -129,7 +136,7 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
         )}
       </dl>
       <div className="downloads">
-        {(["glb", "fbx", "stl", "rigged", "animated", "texture", "ao", "image"] as const).map(
+        {(["glb", "fbx", "stl", "rigged", "animated", "texture", "ao", "normal", "image"] as const).map(
           (key) =>
             job.urls[key] && (
               <a key={key} href={job.urls[key]} target="_blank" rel="noreferrer">
@@ -141,7 +148,9 @@ function JobResult({ job, onRerun, rerunning }: { job: Job; onRerun: (job: Job) 
                       ? "TEXTURE"
                       : key === "ao"
                         ? "AO MAP"
-                        : key.toUpperCase()}
+                        : key === "normal"
+                          ? "NORMAL MAP"
+                          : key.toUpperCase()}
               </a>
             )
         )}
@@ -181,6 +190,9 @@ export default function App() {
   const [animate, setAnimate] = useState(false);
   const [retopology, setRetopology] = useState(false);
   const [bakeTexture, setBakeTexture] = useState(false);
+  const [bakeNormal, setBakeNormal] = useState(false);
+  const [roughnessFactor, setRoughnessFactor] = useState(0.6);
+  const [metallicFactor, setMetallicFactor] = useState(0.0);
   const [seed, setSeed] = useState("");
   const [resolution, setResolution] = useState(256);
   const [threshold, setThreshold] = useState(25.0);
@@ -232,6 +244,9 @@ export default function App() {
         smooth_factor: smoothFactor,
         retopology,
         bake_texture: bakeTexture,
+        bake_normal: bakeNormal,
+        roughness_factor: roughnessFactor,
+        metallic_factor: metallicFactor,
         animate,
       };
       if (seed.trim()) params.seed = Number(seed.trim());
@@ -322,6 +337,10 @@ export default function App() {
                 <input type="checkbox" checked={bakeTexture} onChange={(e) => setBakeTexture(e.target.checked)} />
                 Bake texture
               </label>
+              <label className="checkbox-label" title="Bakes a real normal map from the original full-resolution mesh onto the final decimated one, recovering surface detail lost to decimation. Adds a slow selected-to-active Cycles bake.">
+                <input type="checkbox" checked={bakeNormal} onChange={(e) => setBakeNormal(e.target.checked)} />
+                Bake normal map
+              </label>
               <label className="checkbox-label" title="Runs a QuadriFlow remesh for game-artist-style quad edge flow instead of raw triangle decimation. Adds noticeable time (~5-10s) for a real topology-quality improvement.">
                 <input type="checkbox" checked={retopology} onChange={(e) => setRetopology(e.target.checked)} />
                 Retopology (quads)
@@ -386,6 +405,28 @@ export default function App() {
                     step={1}
                     value={smoothFactor}
                     onChange={(e) => setSmoothFactor(Number(e.target.value))}
+                  />
+                </label>
+                <label title="Flat PBR roughness factor (0 = mirror-smooth, 1 = fully matte). Not a baked map — see docs/PBR.md for why real per-pixel roughness needs a material-understanding model this project doesn't have.">
+                  Roughness
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={roughnessFactor}
+                    onChange={(e) => setRoughnessFactor(Number(e.target.value))}
+                  />
+                </label>
+                <label title="Flat PBR metallic factor (0 = dielectric, 1 = fully metal). Not a baked map — most generated props should stay at 0.">
+                  Metallic
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={metallicFactor}
+                    onChange={(e) => setMetallicFactor(Number(e.target.value))}
                   />
                 </label>
               </div>

@@ -111,7 +111,10 @@ def _run_clean(req: RunRequest, mesh_in: str) -> dict:
     smooth_factor = req.params.get("smooth_factor", 2.0)
     retopology = bool(req.params.get("retopology", False))
     bake_texture = bool(req.params.get("bake_texture", False))
+    bake_normal = bool(req.params.get("bake_normal", False))
     bake_size = req.params.get("bake_size", 2048)
+    roughness_factor = req.params.get("roughness_factor", 0.6)
+    metallic_factor = req.params.get("metallic_factor", 0.0)
 
     job_dir = REPO_ROOT / "scratch" / req.job_id / "clean"
     name = req.params.get("name", "asset")
@@ -127,14 +130,20 @@ def _run_clean(req: RunRequest, mesh_in: str) -> dict:
         "--smooth-iterations", str(smooth_iterations),
         "--smooth-factor", str(smooth_factor),
         "--bake-size", str(bake_size),
+        "--roughness-factor", str(roughness_factor),
+        "--metallic-factor", str(metallic_factor),
     ]
     if retopology:
         cmd.append("--retopology")
     if bake_texture:
         cmd.append("--bake-texture")
+    if bake_normal:
+        cmd.append("--bake-normal")
     # QuadriFlow remeshing and/or the Cycles bake passes run on top of everything else in
-    # cleanup.py, so either one needs more headroom than the geometry-only 300s budget.
-    timeout = 600 if (bake_texture or retopology) else 300
+    # cleanup.py, so any of them needs more headroom than the geometry-only 300s budget.
+    # Normal baking is the slowest (selected-to-active ray casting against the full-res
+    # high-poly source), hence the larger budget when it's on.
+    timeout = 900 if bake_normal else (600 if (bake_texture or retopology) else 300)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise HTTPException(502, {"error": f"blender exited {proc.returncode}: {proc.stderr[-2000:]}"})
@@ -149,6 +158,8 @@ def _run_clean(req: RunRequest, mesh_in: str) -> dict:
         outputs["texture"] = result["texture"]
     if result.get("ao"):
         outputs["ao"] = result["ao"]
+    if result.get("normal"):
+        outputs["normal"] = result["normal"]
 
     return {
         "job_id": req.job_id,
@@ -160,6 +171,9 @@ def _run_clean(req: RunRequest, mesh_in: str) -> dict:
             "smoothed": result.get("smoothed", False),
             "retopologized": result.get("retopologized", False),
             "baked_texture": bool(result.get("texture")),
+            "baked_normal": bool(result.get("normal")),
+            "roughness_factor": result.get("roughness_factor", roughness_factor),
+            "metallic_factor": result.get("metallic_factor", metallic_factor),
             "model": MODEL_NAME,
         },
     }
