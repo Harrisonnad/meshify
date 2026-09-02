@@ -60,14 +60,10 @@ async function runNext(): Promise<void> {
     // animate implies rig -- there's no skeleton to animate without one.
     if (params.rig || params.animate) {
       updateJob(job.id, { status: "rigging" });
-      // Mixamo naming is what animate.py's validation checks against (see docs/ANIMATION.md);
-      // only forced when animate was actually requested so a plain rig-only job's bone naming
-      // is unaffected. A caller-supplied skeleton_template is never overridden.
-      const rigParams: JobParams =
-        params.animate && !params.skeleton_template
-          ? { ...params, skeleton_template: "Mixamo" }
-          : params;
-      const rig = await runRig(job.id, clean.outputs.glb, rigParams);
+      // animate.py classifies the skeleton from its own bone topology (see docs/ANIMATION.md)
+      // rather than depending on a bone-naming template, so no skeleton_template override is
+      // needed here -- whatever naming the caller asked for (default: none) passes through.
+      const rig = await runRig(job.id, clean.outputs.glb, params);
       updateJob(job.id, {
         outputsPatch: { rigged: rig.outputs.rigged },
         recipePatch: { rig: rig.meta },

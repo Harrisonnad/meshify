@@ -111,13 +111,17 @@ would be wasted on them. Set `params.rig: true` on `POST /jobs` to opt in.
 ## Skeleton naming templates: Mixamo/UE5 exist, but don't trust them blindly
 
 `SkinTokenRigTrimesh`'s `skeleton_template` param (`"Keep model names"` default, or
-`"Mixamo"`/`"Unreal Engine 5"`) is passed through via `params.skeleton_template`, and gets
-forced to `"Mixamo"` automatically when `params.animate` is requested (see
-[docs/ANIMATION.md](./ANIMATION.md)). **This renamer does not do real anatomical matching** —
-traced through the vendored source: it tries a geometric heuristic first, but silently falls
-back to overlaying a fixed template name list onto bones in their existing index order when
-that heuristic can't confidently match. Verified empirically on both real rigged outputs on
-hand: the first ~10 bones came out correctly named, everything past that didn't (e.g.
+`"Mixamo"`/`"Unreal Engine 5"`) is passed through via `params.skeleton_template` if a caller
+wants it. **This renamer does not do real anatomical matching** — traced through the vendored
+source: it tries a geometric heuristic first, but silently falls back to overlaying a fixed
+template name list onto bones in their existing index order when that heuristic can't
+confidently match. Verified empirically on both real rigged outputs on hand: the first ~10
+bones came out correctly named, everything past that didn't (e.g.
 `mixamorig:RightShoulder`'s renamed parent came back as `mixamorig:LeftHand`). Anything built
-on top of Mixamo/UE5 naming needs its own hierarchy validation before trusting it — see
-`workers/blender/animate.py`'s `validate_skeleton()` for the pattern.
+on top of Mixamo/UE5 naming needs its own hierarchy validation before trusting it.
+
+The preset animation library ([docs/ANIMATION.md](./ANIMATION.md)) originally depended on
+this renamer and inherited its ~0% real-world hit rate as a result. It no longer requests
+`skeleton_template` at all — `workers/blender/animate.py`'s `classify_skeleton()` identifies
+bone roles directly from the predicted skeleton's topology instead, which was independently
+validated as reliably correct even when the naming isn't.

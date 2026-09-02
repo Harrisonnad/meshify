@@ -131,16 +131,16 @@ compute that's dangerous, not concurrent memory residency.
       majority vote of face-normal-vs-centroid direction and flips the whole mesh back if the
       built-in heuristic got it backwards.
 - [x] **Preset animation library** (opt-in, `params.animate`, implies `params.rig`): bakes an
-      Idle + Walk clip onto the rigged skeleton via `skeleton_template="Mixamo"` naming, but
-      only after validating the renamed skeleton's hierarchy actually makes sense — see
-      [docs/ANIMATION.md](docs/ANIMATION.md) for two real bugs this caught: SkinTokens' own
-      Mixamo-template renamer silently produces nonsense past the first ~10 bones on
-      real-world topologies (verified: both real test rigs on hand fail validation and
-      correctly skip animating rather than risk a corrupted result), and a Blender 5.2
-      glTF-exporter bug that corrupts every action but the first when exporting multiple
-      actions directly (worked around via NLA tracks). The framework itself is verified
-      correct against a hand-built synthetic skeleton; real hit rate on actual generations is
-      low until SkinTokens' template mapping improves.
+      Idle + Walk clip onto the rigged skeleton. Originally depended on SkinTokens'
+      `skeleton_template="Mixamo"` bone-naming feature, which turned out to be broken (its
+      renamer produces nonsense past the first ~10 bones on real topologies — see
+      [docs/ANIMATION.md](docs/ANIMATION.md)) and gave a ~0% real-world hit rate. Fixed by
+      classifying the skeleton directly from its own bone *topology* instead of trusting any
+      naming convention — no `skeleton_template` needed at all now. Verified against the real
+      rig that used to fail 100% of the time: correctly identifies every needed bone, and the
+      baked Walk clip visibly alternates limbs in the right pattern when rendered. Also caught
+      a Blender 5.2 glTF-exporter bug along the way that corrupts every action but the first
+      when exporting multiple actions directly (worked around via NLA tracks).
 - [x] **Real normal-map baking + PBR factors** (opt-in, `params.bake_normal`, plus
       `roughness_factor`/`metallic_factor`): a full-resolution duplicate of the raw meshgen
       output survives decimation/smoothing/retopology just for this, and a selected-to-active
@@ -174,10 +174,10 @@ funded cloud pipeline does that this one doesn't, and why:
   are flat factors, not learned per-pixel material estimation, which is a genuinely different
   scope of work (a model that understands what a surface is *made of*) not attempted.
 - **600+ preset animations + retargeting** — a small Idle + Walk library exists (opt-in,
-  `params.animate`), but hand-authored and gated behind a strict skeleton validation rather
-  than sourced/retargeted mocap — see [docs/ANIMATION.md](docs/ANIMATION.md). Real hit rate
-  on actual generations is currently low (a bug in SkinTokens' own bone-renaming feature, not
-  in this code); nowhere near Meshy's breadth or reliability.
+  `params.animate`), hand-authored rather than sourced/retargeted mocap, and identifies which
+  bones to animate by classifying the rig's own topology instead of trusting a bone-naming
+  convention — see [docs/ANIMATION.md](docs/ANIMATION.md). Verified against a real
+  generation's rig; still nowhere near Meshy's breadth (two clips vs. 600+, no retargeting).
 - **Text-to-texture on an uploaded model** (re-skin existing geometry from a prompt) — not
   attempted; would need a real new ML subsystem (depth/UV-projected diffusion), not a
   Blender-side addition like the rest of this list.
